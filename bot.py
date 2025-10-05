@@ -54,7 +54,7 @@ def generate_suimon_card(meme_bytes_io, prompt_text):
     response = client.images.generate(
         model="gpt-image-1",
         prompt=prompt_text,
-        size="1024x1024",
+        size="1024x1536",
         referenced_images=[{"image": meme_b64}],
     )
 
@@ -85,7 +85,7 @@ def add_logo_to_card(card_image, logo_path, scale=0.18, padding=25):
 # -----------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🌊 Welcome to *SUIMON!* Send a meme or image and I'll generate a digital SUIMON trading card for you!"
+        "🌊 Welcome to the SUIMON card bot! Send a SUIMON meme and I'll generate a digital trading card for you!"
     )
 
 
