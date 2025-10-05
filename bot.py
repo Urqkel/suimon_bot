@@ -125,8 +125,10 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         # Generate the card based on the uploaded image
-        card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
-        final_card_bytes = add_embossed_logo_to_memory("generated_card.png", "suimon_logo.png")
+        generated_card_path = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
+
+        # Add embossed logo
+        final_card_bytes = add_embossed_logo_to_memory(generated_card_path, "suimon_logo.png")
 
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
         output_bytes = io.BytesIO()
@@ -139,8 +141,8 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         caption_text = f"{user_mention} Here’s your SUIMON card! 🃏" if user_mention else "Here’s your SUIMON card! 🃏"
 
-        await update.message.reply_photo(
-            photo=output_bytes,
+         await update.message.reply_photo(
+            photo=final_card_bytes,
             caption=caption_text,
             parse_mode="HTML",
             reply_markup=reply_markup,
