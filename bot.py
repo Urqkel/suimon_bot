@@ -40,78 +40,54 @@ Use foil or holographic effects for Rare/Ultra Rare/Legendary cards.
 Do NOT place text or important elements in the reserved bottom area.
 """
 
-# -----------------------------
-# Helper functions
-# -----------------------------
-def generate_suimon_card_with_logo(meme_bytes_io, logo_path):
-    """Generate SUIMON card and add logo."""
-    meme_bytes_io.seek(0)
-    response = openai.images.edit(
-        model="gpt-image-1",
-        image=meme_bytes_io,
-        prompt=PROMPT_TEMPLATE,
-        size="1024x1536"
-    )
-    card_b64 = response.data[0].b64_json
-    card_image = Image.open(io.BytesIO(base64.b64decode(card_b64))).convert("RGBA")
+SUIMON_LOGO_PATH = "assets/suimon_logo.png"
 
-    # Add logo
-    logo = Image.open(logo_path).convert("RGBA")
-    card_width, card_height = card_image.size
-    logo_ratio = logo.width / logo.height
-    logo_width = int(card_width * 0.18)
-    logo_height = int(logo_width / logo_ratio)
-    logo = logo.resize((logo_width, logo_height), Image.ANTIALIAS)
-    x_pos = (card_width - logo_width) // 2
-    y_pos = card_height - logo_height - 25
-    card_image.paste(logo, (x_pos, y_pos), logo)
-
-    return card_image
-
-# -----------------------------
-# Telegram Handlers
-# -----------------------------
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "Welcome to SUIMON card creator! Send me a meme image and I'll generate a SUIMON card for you."
-    )
-async def handle_image(update, context):
-    # Get the highest-resolution photo
-    photo = update.message.photo[-1]
-    photo_file = await photo.get_file()
-    
-    # Download the image into memory
-    image_bytes = io.BytesIO()
-    await photo_file.download_to_memory(out=image_bytes)
-    image_bytes.seek(0)
-    
-    # Open with PIL to detect format and ensure consistency
-    pil_image = Image.open(image_bytes)
-    image_format = pil_image.format  # 'JPEG', 'PNG', etc.
-    
-    # Save into BytesIO again with correct format
-    image_for_openai = io.BytesIO()
-    pil_image.save(image_for_openai, format=image_format)
-    image_for_openai.seek(0)
-    
-    # Map PIL format to MIME type
-    mime_type = f"image/{image_format.lower()}"  # 'image/jpeg' or 'image/png'
-    file_name = f"uploaded_image.{image_format.lower()}"
+async def handle_image(update: "Update", context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
     
     try:
-        # Send to OpenAI
-        response = client.images.generate(
+        # Get highest resolution image
+        photo = update.message.photo[-1]
+        photo_file = await photo.get_file()
+
+        # Download image into BytesIO
+        image_bytes = io.BytesIO()
+        await photo_file.download_to_memory(out=image_bytes)
+        image_bytes.seek(0)
+
+        # Open with PIL to ensure correct format
+        pil_image = Image.open(image_bytes)
+        image_format = pil_image.format  # 'JPEG' or 'PNG'
+        image_for_openai = io.BytesIO()
+        pil_image.save(image_for_openai, format=image_format)
+        image_for_openai.seek(0)
+
+        mime_type = f"image/{image_format.lower()}"
+        file_name = f"uploaded_image.{image_format.lower()}"
+
+        # Generate SUIMON card
+        response = openai.images.generate(
             model="gpt-image-1",
             prompt=PROMPT_TEMPLATE,
             image=[(file_name, image_for_openai, mime_type)],
             size="1024x1536"
         )
 
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+        card_b64 = response.data[0].b64_json
+        card_image = Image.open(io.BytesIO(base64.b64decode(card_b64))).convert("RGBA")
 
-    try:
-        card_image = generate_suimon_card_with_logo(meme_bytes_io, SUIMON_LOGO_PATH)
+        # Add SUIMON logo at bottom
+        logo = Image.open(SUIMON_LOGO_PATH).convert("RGBA")
+        card_width, card_height = card_image.size
+        logo_ratio = logo.width / logo.height
+        logo_width = int(card_width * 0.18)
+        logo_height = int(logo_width / logo_ratio)
+        logo = logo.resize((logo_width, logo_height), Image.ANTIALIAS)
+        x_pos = (card_width - logo_width) // 2
+        y_pos = card_height - logo_height - 25
+        card_image.paste(logo, (x_pos, y_pos), logo)
 
+        # Send card back to user
         output_bytes = io.BytesIO()
         card_image.save(output_bytes, format="PNG")
         output_bytes.seek(0)
@@ -120,13 +96,11 @@ async def handle_image(update, context):
             [InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        caption_text = f"{user_mention} Here’s your SUIMON card! 🃏" if user_mention else "Here’s your SUIMON card! 🃏"
 
         await update.message.reply_photo(
             photo=output_bytes,
-            caption=caption_text,
-            parse_mode="HTML",
-            reply_markup=reply_markup,
+            caption="Here’s your SUIMON card! 🃏",
+            reply_markup=reply_markup
         )
 
     except Exception as e:
