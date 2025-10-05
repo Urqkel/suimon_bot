@@ -9,15 +9,15 @@ import base64
 # -----------------------------
 # Configuration
 # -----------------------------
-# Environment variables
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SUIMON_LOGO_PATH = "assets/suimon_logo.png"  # Path in repo
+WEBHOOK_URL = "https://suimon-bot.onrender.com/telegram_webhook"  # Your Render domain
+PORT = int(os.environ.get("PORT", 10000))
 
-# Set OpenAI API key
+# OpenAI key
 openai.api_key = OPENAI_API_KEY
 
-# Logo-safe AI prompt
 PROMPT_TEMPLATE = """
 Create a SUIMON digital trading card using the uploaded meme image as the main character.
 
@@ -68,33 +68,28 @@ def add_logo_to_card(card_image, logo_path, scale=0.18, padding=25):
 # -----------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Welcome to the SUIMON card generator! Send me a SUIMON meme and I'll generate a unique card for you."
+        "Welcome to SUIMON! Send me a meme image and I'll generate a SUIMON card for you."
     )
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle user-uploaded images with typing indicator and card generation."""
-    photo = update.message.photo[-1]  # Highest-resolution photo
+    photo = update.message.photo[-1]
     photo_file = await photo.get_file()
-
-    # Download image into memory
+    
     meme_bytes_io = io.BytesIO()
     await photo_file.download_to_memory(out=meme_bytes_io)
     meme_bytes_io.seek(0)
 
-    # Show "typing" status while generating card
+    # Show "typing" while generating
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
-        # 1. Generate card
         card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
-
-        # 2. Overlay logo
         final_card = add_logo_to_card(card_image, SUIMON_LOGO_PATH)
 
-        # Show "uploading photo" status before sending
+        # Show "uploading photo"
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
 
-        # 3. Send final card to user
         output_bytes = io.BytesIO()
         final_card.save(output_bytes, format="PNG")
         output_bytes.seek(0)
@@ -104,7 +99,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Sorry, something went wrong: {e}")
 
 # -----------------------------
-# Main bot setup
+# Main webhook setup
 # -----------------------------
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -112,9 +107,14 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.PHOTO, handle_image))
 
-    print("SUIMON bot is running...")
-    app.run_polling()
+    print("SUIMON bot running with webhook...")
+
+    # Start webhook (Render provides PORT via env)
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_url=WEBHOOK_URL
+    )
 
 if __name__ == "__main__":
     main()
-
