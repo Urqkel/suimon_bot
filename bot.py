@@ -20,9 +20,9 @@ import openai
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 SUIMON_LOGO_PATH = "assets/suimon_logo.png"
+WEBHOOK_PATH = "/telegram_webhook"
 PORT = int(os.environ.get("PORT", 10000))
 DOMAIN = os.getenv("RENDER_EXTERNAL_URL", "https://your-render-domain.com")
-WEBHOOK_PATH = "/telegram_webhook"
 WEBHOOK_URL = f"{DOMAIN}{WEBHOOK_PATH}"
 
 openai.api_key = OPENAI_API_KEY
@@ -41,40 +41,39 @@ Do NOT place text or important elements in the reserved bottom area.
 """
 
 # -----------------------------
-# Helper Functions
+# Helper functions
 # -----------------------------
-def generate_suimon_card(image_bytes_io):
-    """Call OpenAI Images API to generate card"""
-    image_bytes_io.seek(0)
-    response = openai.images.generate(
+def generate_suimon_card_with_logo(meme_bytes_io, logo_path):
+    """Generate SUIMON card and add logo."""
+    meme_bytes_io.seek(0)
+    response = openai.images.edit(
         model="gpt-image-1",
+        image=meme_bytes_io,
         prompt=PROMPT_TEMPLATE,
-        image=[image_bytes_io.read()],  # Pass bytes as list
         size="1024x1536"
     )
-    b64_data = response.data[0].b64_json
-    return Image.open(io.BytesIO(base64.b64decode(b64_data)))
+    card_b64 = response.data[0].b64_json
+    card_image = Image.open(io.BytesIO(base64.b64decode(card_b64))).convert("RGBA")
 
-def add_logo_to_card(card_image, logo_path, scale=0.18, padding=25):
-    """Overlay SUIMON logo at bottom"""
-    card = card_image.convert("RGBA")
+    # Add logo
     logo = Image.open(logo_path).convert("RGBA")
-    card_width, card_height = card.size
+    card_width, card_height = card_image.size
     logo_ratio = logo.width / logo.height
-    logo_width = int(card_width * scale)
+    logo_width = int(card_width * 0.18)
     logo_height = int(logo_width / logo_ratio)
     logo = logo.resize((logo_width, logo_height), Image.ANTIALIAS)
     x_pos = (card_width - logo_width) // 2
-    y_pos = card_height - logo_height - padding
-    card.paste(logo, (x_pos, y_pos), logo)
-    return card
+    y_pos = card_height - logo_height - 25
+    card_image.paste(logo, (x_pos, y_pos), logo)
+
+    return card_image
 
 # -----------------------------
 # Telegram Handlers
 # -----------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Welcome to the SUIMON card creator! Send me a meme image and I'll generate a SUIMON card for you."
+        "Welcome to SUIMON card creator! Send me a meme image and I'll generate a SUIMON card for you."
     )
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -90,12 +89,10 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
-        card_image = generate_suimon_card(meme_bytes_io)
-        final_card = add_logo_to_card(card_image, SUIMON_LOGO_PATH)
+        card_image = generate_suimon_card_with_logo(meme_bytes_io, SUIMON_LOGO_PATH)
 
-        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
         output_bytes = io.BytesIO()
-        final_card.save(output_bytes, format="PNG")
+        card_image.save(output_bytes, format="PNG")
         output_bytes.seek(0)
 
         keyboard = [
@@ -123,18 +120,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 # -----------------------------
-# FastAPI + PTB Setup
+# FastAPI + PTB setup
 # -----------------------------
 fastapi_app = FastAPI()
 ptb_app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# Register handlers
 ptb_app.add_handler(CommandHandler("start", start))
 ptb_app.add_handler(MessageHandler(filters.PHOTO, handle_image))
 ptb_app.add_handler(CallbackQueryHandler(button_callback))
 
 @fastapi_app.on_event("startup")
 async def startup_event():
+    """Start PTB on FastAPI startup and set webhook"""
     await ptb_app.initialize()
     await ptb_app.start()
     await ptb_app.bot.set_webhook(WEBHOOK_URL)
@@ -146,7 +143,9 @@ async def telegram_webhook(req: Request):
     await ptb_app.update_queue.put(update)
     return {"ok": True}
 
+# -----------------------------
+# Run Uvicorn manually if needed
+# -----------------------------
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(fastapi_app, host="0.0.0.0", port=PORT)
-
