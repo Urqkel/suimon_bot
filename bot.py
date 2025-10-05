@@ -142,7 +142,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup = InlineKeyboardMarkup(keyboard)
         caption_text = f"{user_mention} Here’s your SUIMON card! 🃏" if user_mention else "Here’s your SUIMON card! 🃏"
 
-         await update.message.reply_photo(
+        await update.message.reply_photo(
             photo=final_card_bytes,
             caption=caption_text,
             parse_mode="HTML",
