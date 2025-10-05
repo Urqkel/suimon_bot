@@ -31,14 +31,15 @@ PROMPT_TEMPLATE = """
 Create a SUIMON digital trading card using the uploaded meme image as the main character.
 
 Include all design elements: name, element, HP, rarity, two attacks, flavor text, and themed background/frame.
-Leave a clear area at the bottom for a SUIMON logo overlay.
+Leave a clear area at the bottom right corner for a SUIMON logo overlay.
 Top bar: Name, HP, elemental symbol
 Main art: Meme image dynamically styled
 Attack boxes: Two attacks with creative names, icons, and power
 Footer: Weakness/resistance icons and flavor text above the reserved logo space
 Use foil or holographic effects for Legendary cards.
 Every card should have a vintage yet realistic feel.
-Do NOT place text or important elements in the reserved bottom area.
+Do NOT place text or important elements in the reserved bottom area for the logo overlay.
+Add the official SUIMON logo subtly **embossed** or **engraved** into the card surface — giving it a realistic 3D texture, as though pressed into the card material, not floating above it.
 """
 
 # -----------------------------
