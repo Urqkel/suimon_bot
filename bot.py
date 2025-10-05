@@ -53,29 +53,37 @@ def generate_suimon_card(image_bytes_io, prompt_text):
     """
     image_bytes_io.seek(0)
 
-    # Ensure the file is PNG (best for edit API)
+    # Ensure the file is PNG
     img = Image.open(image_bytes_io)
     if img.mode != "RGBA":
         img = img.convert("RGBA")
-    temp_path = "temp_meme.png"
-    img.save(temp_path, format="PNG")
+
+    # Convert Pillow image to bytes for OpenAI
+    img_bytes_io = io.BytesIO()
+    img.save(img_bytes_io, format="PNG")
+    img_bytes_io.seek(0)
 
     # The prompt must clearly reference the input image
     full_prompt = f"Use the uploaded image as the main character for a SUIMON card. {prompt_text}"
 
     response = openai.images.edit(
         model="gpt-image-1",
-        image=open(temp_path, "rb"),  # Base image
+        image=img_bytes_io,  # pass as bytes
         prompt=full_prompt,
         size="1024x1536"  # Card size
-        # No mask parameter so the entire image informs the generation
+        # No mask parameter, entire image informs generation
     )
 
     card_b64 = response.data[0].b64_json
     return Image.open(io.BytesIO(base64.b64decode(card_b64)))
 
-def add_embossed_logo_to_memory(card_path, logo_path="suimon_logo.png"):
-    card = Image.open(card_path).convert("RGBA")
+
+def add_embossed_logo_to_card(card_image, logo_path="suimon_logo.png"):
+    """
+    Adds an embossed SUIMON logo to the bottom-right corner of a Pillow card image.
+    Returns the final card as a BytesIO object ready to send via Telegram.
+    """
+    card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
 
     logo_width = int(card.width * 0.12)
@@ -93,7 +101,7 @@ def add_embossed_logo_to_memory(card_path, logo_path="suimon_logo.png"):
 
     card.alpha_composite(embossed_logo, dest=pos)
 
-    # Save to memory buffer instead of file
+    # Save to memory buffer
     img_bytes = io.BytesIO()
     card.save(img_bytes, format="PNG")
     img_bytes.seek(0)
