@@ -72,14 +72,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle user-uploaded images, generate card, overlay logo, send back."""
+    """Handle user-uploaded images with typing indicator and card generation."""
     photo = update.message.photo[-1]  # Highest-resolution photo
     photo_file = await photo.get_file()
     meme_bytes_io = io.BytesIO()
     await photo_file.download(out=meme_bytes_io)
     meme_bytes_io.seek(0)
 
-    await update.message.reply_text("Generating your SUIMON card... ⚡️")
+    # Show "typing" status while generating card
+    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
         # 1. Generate card
@@ -88,11 +89,15 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # 2. Overlay logo
         final_card = add_logo_to_card(card_image, SUIMON_LOGO_PATH)
 
+        # Show "uploading photo" status before sending
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
+
         # 3. Send final card to user
         output_bytes = io.BytesIO()
         final_card.save(output_bytes, format="PNG")
         output_bytes.seek(0)
         await update.message.reply_photo(photo=output_bytes, caption="Here’s your SUIMON card! 🃏")
+
     except Exception as e:
         await update.message.reply_text(f"Sorry, something went wrong: {e}")
 
