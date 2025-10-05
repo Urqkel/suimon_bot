@@ -47,14 +47,11 @@ Do NOT place text or important elements in the reserved bottom area.
 def generate_suimon_card(image_bytes_io, prompt_text):
     """Generate SUIMON card via OpenAI Images API"""
     image_bytes_io.seek(0)
-    # OpenAI Images API requires base64-encoded image in request
-    encoded_image = base64.b64encode(image_bytes_io.read()).decode("utf-8")
-    
     response = openai.images.generate(
         model="gpt-image-1",
         prompt=prompt_text,
-        size="1024x1536",
-        image=[encoded_image]  # pass as list
+        image=image_bytes_io,  # ✅ pass BytesIO directly
+        size="1024x1536"
     )
     card_b64 = response.data[0].b64_json
     return Image.open(io.BytesIO(base64.b64decode(card_b64)))
