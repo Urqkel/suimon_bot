@@ -53,30 +53,29 @@ def generate_suimon_card(image_bytes_io, prompt_text):
     """
     image_bytes_io.seek(0)
 
-    # Ensure the file is PNG
+    # Ensure the file is PNG (best for edit API)
     img = Image.open(image_bytes_io)
     if img.mode != "RGBA":
         img = img.convert("RGBA")
 
-    # Convert Pillow image to bytes for OpenAI
+    # Save to BytesIO with a name attribute to pass correct mimetype
     img_bytes_io = io.BytesIO()
     img.save(img_bytes_io, format="PNG")
+    img_bytes_io.name = "meme.png"  # important for API to detect correct mimetype
     img_bytes_io.seek(0)
 
-    # The prompt must clearly reference the input image
+    # Full prompt
     full_prompt = f"Use the uploaded image as the main character for a SUIMON card. {prompt_text}"
 
     response = openai.images.edit(
         model="gpt-image-1",
-        image=img_bytes_io,  # pass as bytes
+        image=img_bytes_io,  # pass BytesIO with name
         prompt=full_prompt,
-        size="1024x1536"  # Card size
-        # No mask parameter, entire image informs generation
+        size="1024x1536"
     )
 
     card_b64 = response.data[0].b64_json
     return Image.open(io.BytesIO(base64.b64decode(card_b64)))
-
 
 def add_embossed_logo_to_card(card_image, logo_path="suimon_logo.png"):
     """
