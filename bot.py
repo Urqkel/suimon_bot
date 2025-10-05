@@ -68,15 +68,17 @@ def add_logo_to_card(card_image, logo_path, scale=0.18, padding=25):
 # -----------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Welcome to SUIMON! Send me a meme image and I'll generate a SUIMON card for you."
+        "Welcome to the SUIMON card generator! Send me a SUIMON meme and I'll generate a unique card for you."
     )
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle user-uploaded images with typing indicator and card generation."""
     photo = update.message.photo[-1]  # Highest-resolution photo
     photo_file = await photo.get_file()
+
+    # Download image into memory
     meme_bytes_io = io.BytesIO()
-    await photo_file.download(out=meme_bytes_io)
+    await photo_file.download_to_memory(out=meme_bytes_io)
     meme_bytes_io.seek(0)
 
     # Show "typing" status while generating card
