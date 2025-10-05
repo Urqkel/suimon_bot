@@ -36,7 +36,8 @@ Top bar: Name, HP, elemental symbol
 Main art: Meme image dynamically styled
 Attack boxes: Two attacks with creative names, icons, and power
 Footer: Weakness/resistance icons and flavor text above the reserved logo space
-Use foil or holographic effects for Rare/Ultra Rare/Legendary cards.
+Use foil or holographic effects for Legendary cards.
+Every card should have a vintage yet realistic feel.
 Do NOT place text or important elements in the reserved bottom area.
 """
 
@@ -89,7 +90,7 @@ def add_logo_to_card(card_image, logo_path, scale=0.18, padding=25):
 # -----------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Welcome to SUIMON! Send me a meme image (JPEG or PNG) and I'll generate a SUIMON card for you."
+        "Welcome to SUIMON card creator! Send me a Suimon meme and I'll generate a unique card for you."
     )
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
