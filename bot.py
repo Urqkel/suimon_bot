@@ -1,5 +1,5 @@
 import os
-from telegram import Update
+from telegram import Update, Bot
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from PIL import Image
 import io
@@ -15,7 +15,7 @@ SUIMON_LOGO_PATH = "assets/suimon_logo.png"  # Path in repo
 WEBHOOK_URL = "https://suimon-bot.onrender.com/telegram_webhook"  # Your Render domain
 PORT = int(os.environ.get("PORT", 10000))
 
-# OpenAI key
+# OpenAI API key
 openai.api_key = OPENAI_API_KEY
 
 PROMPT_TEMPLATE = """
@@ -99,17 +99,26 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"Sorry, something went wrong: {e}")
 
 # -----------------------------
-# Main webhook setup
+# Webhook setup helper
+# -----------------------------
+def setup_webhook():
+    """Deletes old webhook and sets the correct webhook URL."""
+    bot = Bot(token=BOT_TOKEN)
+    bot.delete_webhook()
+    bot.set_webhook(WEBHOOK_URL)
+    print(f"Webhook set to {WEBHOOK_URL}")
+
+# -----------------------------
+# Main bot setup
 # -----------------------------
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    setup_webhook()  # Ensure webhook is correct
 
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.PHOTO, handle_image))
 
     print("SUIMON bot running with webhook...")
-
-    # Start webhook (Render provides PORT via env)
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
