@@ -1,10 +1,8 @@
 import os
-import logging
+import io
+import base64
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from telegram import (
-    Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
-)
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -13,41 +11,23 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from openai import OpenAI
-import io
-import asyncio
+from PIL import Image
+import openai
 
-# --- CONFIG ---
-BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "YOUR_OPENAI_API_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://suimon-bot.onrender.com/telegram_webhook")
+# -----------------------------
+# Configuration
+# -----------------------------
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")  # Your bot token
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # OpenAI API key
+SUIMON_LOGO_PATH = "assets/suimon_logo.png"
+WEBHOOK_PATH = "/telegram_webhook"
+PORT = int(os.environ.get("PORT", 10000))
+DOMAIN = os.getenv("RENDER_EXTERNAL_URL", "https://your-render-domain.com")
+WEBHOOK_URL = f"{DOMAIN}{WEBHOOK_PATH}"
 
-client = OpenAI(api_key=OPENAI_API_KEY)
-fastapi_app = FastAPI()
-logging.basicConfig(level=logging.INFO)
+openai.api_key = OPENAI_API_KEY
 
-# --- BOT INITIALIZATION ---
-application = Application.builder().token(BOT_TOKEN).build()
-
-# --- HANDLERS ---
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Welcome to the SUIMON Card Creator! Send me an image to create your card.")
-
-
-async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        photo = update.message.photo[-1]
-        file = await photo.get_file()
-        file_bytes = await file.download_as_bytearray()
-
-        await update.message.reply_text("⚙️ Creating your SUIMON card... please wait a moment!")
-
-        # Upload image to OpenAI
-        uploaded_image = client.images.upload(file=io.BytesIO(file_bytes))
-
-        # Generate SUIMON card
-        PROMPT_TEMPLATE = """
+PROMPT_TEMPLATE = """
 Create a SUIMON digital trading card using the uploaded meme image as the main character.
 
 Include all design elements: name, element, HP, rarity, two attacks, flavor text, and themed background/frame.
@@ -60,64 +40,108 @@ Use foil or holographic effects for Rare/Ultra Rare/Legendary cards.
 Do NOT place text or important elements in the reserved bottom area.
 """
 
-        result = client.images.generate(
-            model="gpt-image-1",
-            prompt=prompt,
-            image=[uploaded_image.id],  # ✅ correct parameter
-            size="1024x1536"
+# -----------------------------
+# FastAPI + Telegram
+# -----------------------------
+fastapi_app = FastAPI()
+application = ApplicationBuilder().token(BOT_TOKEN).build()
+
+# -----------------------------
+# Helper functions
+# -----------------------------
+def add_logo_to_card(card_image, logo_path, scale=0.18, padding=25):
+    card = card_image.convert("RGBA")
+    logo = Image.open(logo_path).convert("RGBA")
+    card_width, card_height = card.size
+    logo_ratio = logo.width / logo.height
+    logo_width = int(card_width * scale)
+    logo_height = int(logo_width / logo_ratio)
+    logo = logo.resize((logo_width, logo_height), Image.ANTIALIAS)
+    x_pos = (card_width - logo_width) // 2
+    y_pos = card_height - logo_height - padding
+    card.paste(logo, (x_pos, y_pos), logo)
+    return card
+
+# -----------------------------
+# Telegram Handlers
+# -----------------------------
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "Welcome to SUIMON! Send me a meme image and I'll generate a SUIMON card for you."
+    )
+
+async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        photo = update.message.photo[-1]
+        photo_file = await photo.get_file()
+        meme_bytes_io = io.BytesIO()
+        await photo_file.download_to_memory(out=meme_bytes_io)
+        meme_bytes_io.seek(0)
+
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+
+        # Step 1: Upload the image to OpenAI
+        uploaded_image = openai.Image.create(
+            image=meme_bytes_io,
+            purpose="image-alpha"
         )
 
-        image_url = result.data[0].url
+        # Step 2: Generate SUIMON card
+        result = openai.images.generate(
+            model="gpt-image-1",
+            prompt=PROMPT_TEMPLATE,
+            image=[uploaded_image.id],  # pass as a list
+            size="1024x1536"  # vertical card
+        )
+
+        card_data = base64.b64decode(result.data[0].b64_json)
+        card_image = Image.open(io.BytesIO(card_data)).convert("RGBA")
+
+        # Step 3: Overlay SUIMON logo
+        final_card = add_logo_to_card(card_image, SUIMON_LOGO_PATH)
+
+        # Step 4: Send the final card
+        output_bytes = io.BytesIO()
+        final_card.save(output_bytes, format="PNG")
+        output_bytes.seek(0)
 
         keyboard = [
-            [InlineKeyboardButton("✨ Create another card", callback_data="create_another")]
+            [InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await update.message.reply_photo(
-            photo=image_url,
-            caption="🎴 Your SUIMON card is ready!",
-            reply_markup=reply_markup
-        )
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
+        await update.message.reply_photo(photo=InputFile(output_bytes), caption="🔥 Here’s your SUIMON card!", reply_markup=reply_markup)
 
     except Exception as e:
-        logging.error(f"Error generating card: {e}")
-        await update.message.reply_text(f"❌ Error generating card: {e}")
+        await update.message.reply_text(f"Error generating card: {e}")
 
-
-async def handle_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     if query.data == "create_another":
-        await query.message.reply_text("🖼️ Send another image to create your next SUIMON card!")
+        await query.message.reply_text("Awesome! Send me a new meme image, and I'll make another SUIMON card for you.")
 
-
-# --- REGISTER HANDLERS ---
+# -----------------------------
+# Add Handlers
+# -----------------------------
 application.add_handler(CommandHandler("start", start))
 application.add_handler(MessageHandler(filters.PHOTO, handle_image))
-application.add_handler(CallbackQueryHandler(handle_button))
+application.add_handler(CallbackQueryHandler(button_callback))
 
-# --- FASTAPI WEBHOOK ENDPOINT ---
-@fastapi_app.post("/telegram_webhook")
-async def telegram_webhook(request: Request):
-    data = await request.json()
-    update = Update.de_json(data, application.bot)
-    await application.process_update(update)
-    return JSONResponse({"ok": True})
-
-
-# --- STARTUP EVENT ---
+# -----------------------------
+# FastAPI Webhook
+# -----------------------------
 @fastapi_app.on_event("startup")
-async def startup():
-    webhook_info = await application.bot.get_webhook_info()
-    if webhook_info.url != WEBHOOK_URL:
-        await application.bot.set_webhook(WEBHOOK_URL)
-        logging.info(f"Webhook set to {WEBHOOK_URL}")
-    logging.info("SUIMON bot running with webhook...")
+async def startup_event():
+    await application.initialize()
+    await application.start()
+    # Set webhook
+    await application.bot.set_webhook(WEBHOOK_URL)
 
-
-# --- ENTRY POINT ---
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(fastapi_app, host="0.0.0.0", port=10000)
+@fastapi_app.post(WEBHOOK_PATH)
+async def telegram_webhook(req: Request):
+    data = await req.json()
+    update = Update.de_json(data, application.bot)
+    await application.update_queue.put(update)
+    return {"ok": True}
