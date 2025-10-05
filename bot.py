@@ -79,7 +79,7 @@ def add_logo_to_card(card_image, logo_path, scale=0.18, padding=25):
     logo_ratio = logo.width / logo.height
     logo_width = int(card_width * scale)
     logo_height = int(logo_width / logo_ratio)
-    logo = logo.resize((logo_width, logo_height), Image.ANTIALIAS)
+    logo = logo.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
     x_pos = (card_width - logo_width) // 2
     y_pos = card_height - logo_height - padding
     card.paste(logo, (x_pos, y_pos), logo)
@@ -94,6 +94,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Notify user the card is being generated
+    await update.message.reply_text(
+        "🎨 Your SUIMON card is being generated! This may take a few minutes..."
+    )
+
     chat_type = update.effective_chat.type
     user_mention = update.message.from_user.mention_html() if chat_type in ["group", "supergroup"] else ""
 
@@ -106,7 +111,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
-        # Generate card based on uploaded image
+        # Generate the card based on the uploaded image
         card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
         final_card = add_logo_to_card(card_image, SUIMON_LOGO_PATH)
 
@@ -129,7 +134,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     except Exception as e:
-        await update.message.reply_text(f"Error generating card: {e}")
+        await update.message.reply_text(f"Sorry, something went wrong: {e}")
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
