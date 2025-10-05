@@ -1,6 +1,7 @@
 import os
-from telegram import Update, Bot
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+import asyncio
+from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from PIL import Image
 import io
 import openai
@@ -93,30 +94,52 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         output_bytes = io.BytesIO()
         final_card.save(output_bytes, format="PNG")
         output_bytes.seek(0)
-        await update.message.reply_photo(photo=output_bytes, caption="Here’s your SUIMON card! 🃏")
+
+        # Create inline keyboard
+        keyboard = [
+            [InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_photo(
+            photo=output_bytes,
+            caption="Here’s your SUIMON card! 🃏",
+            reply_markup=reply_markup
+        )
 
     except Exception as e:
         await update.message.reply_text(f"Sorry, something went wrong: {e}")
 
+async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()  # Acknowledge the button press
+
+    if query.data == "create_another":
+        await query.message.reply_text(
+            "Awesome! Send me a new meme image, and I'll make another SUIMON card for you."
+        )
+
 # -----------------------------
 # Webhook setup helper
 # -----------------------------
-def setup_webhook():
+async def setup_webhook():
     """Deletes old webhook and sets the correct webhook URL."""
     bot = Bot(token=BOT_TOKEN)
-    bot.delete_webhook()
-    bot.set_webhook(WEBHOOK_URL)
+    await bot.delete_webhook()
+    await bot.set_webhook(WEBHOOK_URL)
     print(f"Webhook set to {WEBHOOK_URL}")
 
 # -----------------------------
 # Main bot setup
 # -----------------------------
 def main():
-    setup_webhook()  # Ensure webhook is correct
+    # Setup webhook properly
+    asyncio.run(setup_webhook())
 
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.PHOTO, handle_image))
+    app.add_handler(CallbackQueryHandler(button_callback))
 
     print("SUIMON bot running with webhook...")
     app.run_webhook(
