@@ -44,17 +44,16 @@ Do NOT place text or important elements in the reserved bottom area.
 # -----------------------------
 # Helper functions
 # -----------------------------
-def generate_suimon_card(image_bytes_io, prompt_text):
-    # Save user image temporarily to a local file
+def generate_card_from_image(image_bytes_io, prompt_text):
+    image_bytes_io.seek(0)
     with open("temp_meme.png", "wb") as f:
         f.write(image_bytes_io.read())
-    
-    # Use the file as a reference in your prompt
-    prompt_with_image = f"Create a SUIMON card using the character from this image: temp_meme.png. {prompt_text}"
-    
-    response = openai.images.generate(
+
+    response = openai.images.edit(
         model="gpt-image-1",
-        prompt=prompt_with_image,
+        image=open("temp_meme.png", "rb"),
+        mask=None,  # leave None to edit the whole image based on prompt
+        prompt=prompt_text,
         size="1024x1536"
     )
     card_b64 = response.data[0].b64_json
