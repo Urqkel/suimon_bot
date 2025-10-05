@@ -1,7 +1,13 @@
 import os
-import asyncio
 from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    filters,
+    ContextTypes,
+)
 from PIL import Image
 import io
 import openai
@@ -12,11 +18,10 @@ import base64
 # -----------------------------
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-SUIMON_LOGO_PATH = "assets/suimon_logo.png"  # Path in repo
-WEBHOOK_URL = "https://suimon-bot.onrender.com/telegram_webhook"  # Your Render domain
+SUIMON_LOGO_PATH = "assets/suimon_logo.png"
+WEBHOOK_URL = "https://suimon-bot.onrender.com/telegram_webhook"  # Your Render URL
 PORT = int(os.environ.get("PORT", 10000))
 
-# OpenAI API key
 openai.api_key = OPENAI_API_KEY
 
 PROMPT_TEMPLATE = """
@@ -41,11 +46,12 @@ def generate_suimon_card(meme_bytes_io, prompt_text):
         model="gpt-image-1",
         prompt=prompt_text,
         image=meme_bytes_io,
-        size="1024x1024"
+        size="1024x1024",
     )
     card_data = response.data[0].b64_json
     card_image = Image.open(io.BytesIO(base64.b64decode(card_data)))
     return card_image
+
 
 def add_logo_to_card(card_image, logo_path, scale=0.18, padding=25):
     """Overlay SUIMON logo on the card."""
@@ -64,6 +70,7 @@ def add_logo_to_card(card_image, logo_path, scale=0.18, padding=25):
     card.paste(logo, (x_pos, y_pos), logo)
     return card
 
+
 # -----------------------------
 # Telegram bot handlers
 # -----------------------------
@@ -72,81 +79,94 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Welcome to SUIMON! Send me a meme image and I'll generate a SUIMON card for you."
     )
 
+
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle user-uploaded images with typing indicator and card generation."""
+    # Detect group messages
+    chat_type = update.effective_chat.type
+    user_mention = update.message.from_user.mention_html() if chat_type in ["group", "supergroup"] else ""
+
     photo = update.message.photo[-1]
     photo_file = await photo.get_file()
-    
+
     meme_bytes_io = io.BytesIO()
     await photo_file.download_to_memory(out=meme_bytes_io)
     meme_bytes_io.seek(0)
 
-    # Show "typing" while generating
+    # Typing indicator
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
         card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
         final_card = add_logo_to_card(card_image, SUIMON_LOGO_PATH)
 
-        # Show "uploading photo"
+        # Uploading photo indicator
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
 
         output_bytes = io.BytesIO()
         final_card.save(output_bytes, format="PNG")
         output_bytes.seek(0)
 
-        # Create inline keyboard
+        # Inline button
         keyboard = [
             [InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
+        caption_text = f"{user_mention} Here’s your SUIMON card! 🃏" if user_mention else "Here’s your SUIMON card! 🃏"
+
         await update.message.reply_photo(
             photo=output_bytes,
-            caption="Here’s your SUIMON card! 🃏",
-            reply_markup=reply_markup
+            caption=caption_text,
+            parse_mode="HTML",
+            reply_markup=reply_markup,
         )
 
     except Exception as e:
         await update.message.reply_text(f"Sorry, something went wrong: {e}")
 
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # Acknowledge the button press
+    await query.answer()
 
     if query.data == "create_another":
         await query.message.reply_text(
             "Awesome! Send me a new meme image, and I'll make another SUIMON card for you."
         )
 
+
 # -----------------------------
 # Webhook setup helper
 # -----------------------------
-async def setup_webhook():
+async def setup_webhook(app):
     """Deletes old webhook and sets the correct webhook URL."""
-    bot = Bot(token=BOT_TOKEN)
+    bot = app.bot
     await bot.delete_webhook()
     await bot.set_webhook(WEBHOOK_URL)
     print(f"Webhook set to {WEBHOOK_URL}")
+
 
 # -----------------------------
 # Main bot setup
 # -----------------------------
 def main():
-    # Setup webhook properly
-    asyncio.run(setup_webhook())
-
     app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    # Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.PHOTO, handle_image))
     app.add_handler(CallbackQueryHandler(button_callback))
 
     print("SUIMON bot running with webhook...")
+    # Pass async webhook setup using post_init
     app.run_webhook(
         listen="0.0.0.0",
         port=PORT,
-        webhook_url=WEBHOOK_URL
+        webhook_url=WEBHOOK_URL,
+        post_init=setup_webhook,  # sets webhook inside PTB loop
     )
+
 
 if __name__ == "__main__":
     main()
