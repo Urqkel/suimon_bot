@@ -73,33 +73,30 @@ def generate_suimon_card(image_bytes_io, prompt_text):
     card_b64 = response.data[0].b64_json
     return Image.open(io.BytesIO(base64.b64decode(card_b64)))
 
-def add_embossed_logo(card_path, logo_path="suimon_logo.png", output_path="final_card.png"):
-    """
-    Adds an embossed SUIMON logo to the bottom-right corner of the generated card.
-    """
+def add_embossed_logo_to_memory(card_path, logo_path="suimon_logo.png"):
     card = Image.open(card_path).convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
 
-    # Scale logo to ~12% of card width
     logo_width = int(card.width * 0.12)
     logo_ratio = logo_width / logo.width
     logo_height = int(logo.height * logo_ratio)
-    logo = logo.resize((logo_width, logo_height), Image.Resampling.LANCZOS)
+    logo = logo.resize((logo_width, logo_height), Image.LANCZOS)
 
-    # Create an embossed effect
     embossed_logo = logo.filter(ImageFilter.EMBOSS)
     enhancer = ImageEnhance.Brightness(embossed_logo)
-    embossed_logo = enhancer.enhance(1.4)  # slightly brighter for metallic sheen
+    embossed_logo = enhancer.enhance(1.4)
 
-    # Position: bottom-right corner with 3% margin
     margin_x = int(card.width * 0.03)
     margin_y = int(card.height * 0.03)
     pos = (card.width - logo_width - margin_x, card.height - logo_height - margin_y)
 
-    # Paste with transparency
     card.alpha_composite(embossed_logo, dest=pos)
-    card.save(output_path)
-    return output_path
+
+    # Save to memory buffer instead of file
+    img_bytes = io.BytesIO()
+    card.save(img_bytes, format="PNG")
+    img_bytes.seek(0)
+    return img_bytes
 
 # -----------------------------
 # Telegram Handlers
@@ -129,7 +126,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         # Generate the card based on the uploaded image
         card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
-        final_card = add_embossed_logo(card_image, SUIMON_LOGO_PATH)
+        final_card_bytes = add_embossed_logo_to_memory("generated_card.png", "suimon_logo.png")
 
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
         output_bytes = io.BytesIO()
