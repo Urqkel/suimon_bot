@@ -75,16 +75,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Welcome to SUIMON card creator! Send me a meme image and I'll generate a SUIMON card for you."
     )
-
-async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_type = update.effective_chat.type
-    user_mention = update.message.from_user.mention_html() if chat_type in ["group", "supergroup"] else ""
-
+async def handle_image(update, context):
+    # Get the highest-resolution photo
     photo = update.message.photo[-1]
     photo_file = await photo.get_file()
-    meme_bytes_io = io.BytesIO()
-    await photo_file.download_to_memory(out=meme_bytes_io)
-    meme_bytes_io.seek(0)
+    
+    # Download the image into memory
+    image_bytes = io.BytesIO()
+    await photo_file.download_to_memory(out=image_bytes)
+    image_bytes.seek(0)
+    
+    # Open with PIL to detect format and ensure consistency
+    pil_image = Image.open(image_bytes)
+    image_format = pil_image.format  # 'JPEG', 'PNG', etc.
+    
+    # Save into BytesIO again with correct format
+    image_for_openai = io.BytesIO()
+    pil_image.save(image_for_openai, format=image_format)
+    image_for_openai.seek(0)
+    
+    # Map PIL format to MIME type
+    mime_type = f"image/{image_format.lower()}"  # 'image/jpeg' or 'image/png'
+    file_name = f"uploaded_image.{image_format.lower()}"
+    
+    try:
+        # Send to OpenAI
+        response = client.images.generate(
+            model="gpt-image-1",
+            prompt=PROMPT_TEMPLATE,
+            image=[(file_name, image_for_openai, mime_type)],
+            size="1024x1536"
+        )
 
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
