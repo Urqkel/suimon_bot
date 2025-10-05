@@ -45,12 +45,16 @@ Do NOT place text or important elements in the reserved bottom area.
 # Helper functions
 # -----------------------------
 def generate_suimon_card(image_bytes_io, prompt_text):
-    """Generate SUIMON card via OpenAI Images API"""
-    image_bytes_io.seek(0)
+    # Save user image temporarily to a local file
+    with open("temp_meme.png", "wb") as f:
+        f.write(image_bytes_io.read())
+    
+    # Use the file as a reference in your prompt
+    prompt_with_image = f"Create a SUIMON card using the character from this image: temp_meme.png. {prompt_text}"
+    
     response = openai.images.generate(
         model="gpt-image-1",
-        prompt=prompt_text,
-        image=image_bytes_io,  # ✅ pass BytesIO directly
+        prompt=prompt_with_image,
         size="1024x1536"
     )
     card_b64 = response.data[0].b64_json
