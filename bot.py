@@ -6,7 +6,12 @@ from telegram import (
     Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 )
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler, ContextTypes, filters
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    filters,
+    ContextTypes,
 )
 from openai import OpenAI
 import io
