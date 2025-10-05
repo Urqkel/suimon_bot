@@ -1,7 +1,6 @@
 import os
 import io
 import base64
-import asyncio
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -14,7 +13,6 @@ from telegram.ext import (
 )
 from PIL import Image
 import openai
-import uvicorn
 
 # -----------------------------
 # Configuration
@@ -46,18 +44,16 @@ Do NOT place text or important elements in the reserved bottom area.
 # Helper functions
 # -----------------------------
 def generate_suimon_card(meme_bytes_io, prompt_text):
-    """Generates the SUIMON card image using OpenAI."""
     response = openai.images.generate(
         model="gpt-image-1",
         prompt=prompt_text,
         image=meme_bytes_io,
-        size="1024x1024",
+        size="1024x1536",
     )
     card_data = response.data[0].b64_json
     return Image.open(io.BytesIO(base64.b64decode(card_data)))
 
 def add_logo_to_card(card_image, logo_path, scale=0.18, padding=25):
-    """Overlays the SUIMON logo at the bottom of the card."""
     card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
     card_width, card_height = card.size
@@ -124,7 +120,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 # -----------------------------
-# FastAPI App for Webhook
+# FastAPI + PTB
 # -----------------------------
 fastapi_app = FastAPI()
 ptb_app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -132,17 +128,17 @@ ptb_app.add_handler(CommandHandler("start", start))
 ptb_app.add_handler(MessageHandler(filters.PHOTO, handle_image))
 ptb_app.add_handler(CallbackQueryHandler(button_callback))
 
+@fastapi_app.on_event("startup")
+async def startup_event():
+    """Start PTB application on FastAPI startup"""
+    await ptb_app.initialize()
+    await ptb_app.start()
+    # Set webhook for Telegram
+    await ptb_app.bot.set_webhook(WEBHOOK_URL)
+
 @fastapi_app.post(WEBHOOK_PATH)
 async def telegram_webhook(req: Request):
     data = await req.json()
     update = Update.de_json(data, ptb_app.bot)
     await ptb_app.update_queue.put(update)
     return {"ok": True}
-
-# -----------------------------
-# Run server
-# -----------------------------
-if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(ptb_app.bot.set_webhook(WEBHOOK_URL))
-    uvicorn.run(fastapi_app, host="0.0.0.0", port=PORT)
