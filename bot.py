@@ -11,7 +11,7 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from PIL import Image
+from PIL import Image, ImageEnhance, ImageFilter
 import openai
 
 # -----------------------------
@@ -49,6 +49,7 @@ def generate_suimon_card(image_bytes_io, prompt_text):
     """
     Generate a SUIMON card using the uploaded meme image as the base for the character.
     Supports JPEG and PNG.
+    Returns the card image as a Pillow object.
     """
     image_bytes_io.seek(0)
 
