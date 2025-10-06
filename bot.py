@@ -94,56 +94,68 @@ def circular_crop(img: Image.Image) -> Image.Image:
     result.paste(img, (0, 0), mask=mask)
     return result
 
-def add_premium_holographic_logo(card_image: Image.Image, logo_path="suimon_logo.png") -> io.BytesIO:
+def add_embossed_logo_to_memory(card_image: Image.Image, logo_path="suimon_logo.png") -> io.BytesIO:
+     """
+    Adds a premium, circular holographic SUIMON logo to the bottom-right corner of the card.
+    The logo appears semi-transparent with metallic foil reflections and soft embossing.
+    Returns the final composited card as a BytesIO stream.
     """
-    Adds a premium holographic circular SUIMON logo at the bottom-right corner.
-    The effect uses multi-layered shimmer gradients to simulate metallic and holographic reflection.
-    """
+    # Ensure RGBA for proper alpha handling
     card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
 
-    # --- Resize + crop the logo to a perfect circle
-    logo_size = int(min(card.size) * 0.18)
-    logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
-    logo = circular_crop(logo)
+    # ---- Step 1: Circular crop ----
+    size = min(logo.size)
+    mask = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse((0, 0, size, size), fill=255)
+    logo_cropped = logo.crop(((logo.width - size)//2, (logo.height - size)//2,
+                              (logo.width + size)//2, (logo.height + size)//2))
+    logo_cropped.putalpha(mask)
 
-   # Create a holographic shimmer overlay
-    holo_overlay = Image.new("RGBA", logo.size, (0, 0, 0, 0))
-    holo_draw = ImageDraw.Draw(holo_overlay)
+    # ---- Step 2: Resize & position ----
+    logo_width = int(card.width * 0.14)
+    logo_ratio = logo_width / logo_cropped.width
+    logo_height = int(logo_cropped.height * logo_ratio)
+    logo_resized = logo_cropped.resize((logo_width, logo_height), Image.LANCZOS)
+    margin_x = int(card.width * 0.03)
+    margin_y = int(card.height * 0.03)
+    pos = (card.width - logo_width - margin_x, card.height - logo_height - margin_y)
 
-    for i in range(0, logo_size, 3):
-        r = int(128 + 127 * math.sin(i * 0.15))
-        g = int(128 + 127 * math.sin(i * 0.17 + 2))
-        b = int(128 + 127 * math.sin(i * 0.19 + 4))
-        alpha = random.randint(40, 90)
-        holo_draw.line([(0, i), (logo_size, i)], fill=(r, g, b, alpha), width=2)
+    # ---- Step 3: Apply foil-like color modulation ----
+    # Create subtle metallic overlay (blue–silver tint)
+    foil_overlay = Image.new("RGBA", logo_resized.size)
+    for x in range(logo_resized.width):
+        for y in range(logo_resized.height):
+            r, g, b, a = logo_resized.getpixel((x, y))
+            if a > 0:
+                # Gentle metallic gradient modulation
+                shift = int(40 * (x / logo_resized.width))  # blue-to-silver sweep
+                foil_overlay.putpixel((x, y), (r + shift, g + shift, min(255, b + 80), int(a * 0.5)))
+            else:
+                foil_overlay.putpixel((x, y), (0, 0, 0, 0))
 
-    # Blur for smooth sheen and blend with logo
-    holo_overlay = holo_overlay.filter(ImageFilter.GaussianBlur(2))
-    holographic_logo = Image.alpha_composite(logo, holo_overlay)
+    # Blend original + metallic overlay
+    logo_metallic = Image.blend(logo_resized, foil_overlay, 0.5)
 
-    # Slight metallic sheen (contrast + brightness)
-    enhancer = ImageEnhance.Brightness(holographic_logo)
-    holographic_logo = enhancer.enhance(1.1)
-    enhancer = ImageEnhance.Contrast(holographic_logo)
-    holographic_logo = enhancer.enhance(1.2)
+    # ---- Step 4: Add soft embossing ----
+    embossed = logo_metallic.filter(ImageFilter.EMBOSS)
+    blended = Image.blend(logo_metallic, embossed, 0.4)
 
-    # Add outer soft glow
-    glow = holographic_logo.filter(ImageFilter.GaussianBlur(8))
-    combined = Image.new("RGBA", card.size, (0, 0, 0, 0))
-    pos = (
-        card.width - logo_size - int(card.width * 0.04),
-        card.height - logo_size - int(card.height * 0.04)
-    )
-    combined.paste(glow, pos, glow)
-    card = Image.alpha_composite(card, combined)
-    card.alpha_composite(holographic_logo, dest=pos)
+    # ---- Step 5: Light edge highlight for authenticity feel ----
+    edge = Image.new("RGBA", blended.size, (255, 255, 255, 0))
+    edge_draw = ImageDraw.Draw(edge)
+    edge_draw.ellipse((2, 2, blended.width-2, blended.height-2), outline=(255, 255, 255, 60), width=3)
+    blended = Image.alpha_composite(blended, edge)
 
-    # Save to memory
-    output_bytes = io.BytesIO()
-    card.save(output_bytes, format="PNG")
-    output_bytes.seek(0)
-    return output_bytes
+    # ---- Step 6: Composite onto the card ----
+    card.alpha_composite(blended, dest=pos)
+
+    # ---- Step 7: Export to memory ----
+    output = io.BytesIO()
+    card.save(output, format="PNG")
+    output.seek(0)
+    return output
     
 # -----------------------------
 # Telegram Handlers
@@ -172,7 +184,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
-        final_card_bytes = add_premium_holographic_logo(card_image, SUIMON_LOGO_PATH)
+        final_card_bytes = add_embossed_logo_to_memory(card_image, SUIMON_LOGO_PATH)
 
         keyboard = [
             [InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]
