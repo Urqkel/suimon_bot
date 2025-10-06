@@ -77,39 +77,52 @@ def generate_suimon_card(image_bytes_io, prompt_text):
     card_b64 = response.data[0].b64_json
     return Image.open(io.BytesIO(base64.b64decode(card_b64)))
 
-def add_embossed_logo_to_image(card_image, logo_path="suimon_logo.png"):
+def add_holographic_logo(card_image, logo_path="suimon_logo.png"):
     """
-    Adds an embossed SUIMON logo to the bottom-right of a Pillow image.
-    Returns a BytesIO ready to send to Telegram.
+    Adds a holographic-style logo to the bottom-right corner of a SUIMON card.
+    Returns a BytesIO object containing the final image.
     """
     card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
 
-    # Resize logo
+    # Resize logo to ~12% of card width
     logo_width = int(card.width * 0.12)
     logo_ratio = logo_width / logo.width
     logo_height = int(logo.height * logo_ratio)
     logo = logo.resize((logo_width, logo_height), Image.LANCZOS)
 
-    # Emboss and enhance logo
-    embossed_logo = logo.filter(ImageFilter.EMBOSS)
-    enhancer = ImageEnhance.Brightness(embossed_logo)
-    embossed_logo = enhancer.enhance(1.4)
+    # Create a rainbow-like gradient overlay for hologram effect
+    gradient = Image.new("RGBA", logo.size)
+    for y in range(logo.height):
+        for x in range(logo.width):
+            # Generate shifting rainbow colors
+            r = int(128 + 127 * ((x + y) % logo.width) / logo.width)
+            g = int(128 + 127 * ((y) % logo.height) / logo.height)
+            b = int(255 - ((x + y) % 128))
+            a = int(200)  # Semi-transparent
+            gradient.putpixel((x, y), (r, g, b, a))
 
-    # Position at bottom-right with margin
-    margin_x = int(card.width * 0.03)
+    # Combine gradient with logo
+    holo_logo = Image.alpha_composite(logo, gradient)
+
+    # Optional: emboss or enhance brightness for depth
+    holo_logo = holo_logo.filter(ImageFilter.EMBOSS)
+    enhancer = ImageEnhance.Brightness(holo_logo)
+    holo_logo = enhancer.enhance(1.3)
+
+    # Position logo bottom-right with margin
+    margin_x = int(card.width * 0.05)
     margin_y = int(card.height * 0.03)
-    pos = (card.width - logo_width - margin_x, card.height - logo_height - margin_y)
+    position = (card.width - logo_width - margin_x, card.height - logo_height - margin_y)
 
-    # Apply logo
-    card.alpha_composite(embossed_logo, dest=pos)
+    # Overlay holographic logo onto card
+    card.alpha_composite(holo_logo, dest=position)
 
-    # Save to BytesIO
+    # Save to memory buffer
     img_bytes = io.BytesIO()
     card.save(img_bytes, format="PNG")
     img_bytes.seek(0)
     return img_bytes
-
 # -----------------------------
 # Telegram Handlers
 # -----------------------------
@@ -137,7 +150,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
-        final_card_bytes = add_embossed_logo_to_image(card_image, SUIMON_LOGO_PATH)
+        final_card_bytes = add_holographic_logo(card_image, SUIMON_LOGO_PATH)
 
         keyboard = [
             [InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]
