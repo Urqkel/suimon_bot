@@ -164,7 +164,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
-        final_card_bytes = add_holographic_logo(card_image, SUIMON_LOGO_PATH)
+        final_card_bytes = add_premium_holographic_logo(card_image, SUIMON_LOGO_PATH)
 
         keyboard = [
             [InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]
