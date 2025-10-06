@@ -1,5 +1,5 @@
 import os
-import io
+import io, math
 import base64
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -11,7 +11,7 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance, ImageFilter, ImageDraw
 import openai
 
 # -----------------------------
@@ -77,52 +77,66 @@ def generate_suimon_card(image_bytes_io, prompt_text):
     card_b64 = response.data[0].b64_json
     return Image.open(io.BytesIO(base64.b64decode(card_b64)))
 
-def add_holographic_logo(card_image, logo_path="suimon_logo.png"):
+def circular_crop(img: Image.Image) -> Image.Image:
+    """Crop an image to a perfect circle with transparency."""
+    img = img.convert("RGBA")
+    size = min(img.size)
+    mask = Image.new("L", (size, size), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.ellipse((0, 0, size, size), fill=255)
+
+    # Center crop the image to a square before masking
+    x = (img.width - size) // 2
+    y = (img.height - size) // 2
+    img = img.crop((x, y, x + size, y + size))
+
+    result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    result.paste(img, (0, 0), mask=mask)
+    return result
+
+def add_premium_holographic_logo(card_image: Image.Image, logo_path="suimon_logo.png") -> io.BytesIO:
     """
-    Adds a holographic-style logo to the bottom-right corner of a SUIMON card.
-    Returns a BytesIO object containing the final image.
+    Adds a premium holographic circular SUIMON logo at the bottom-right corner.
+    Gives it a shimmering metallic effect for authenticity.
     """
     card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
 
-    # Resize logo to ~12% of card width
-    logo_width = int(card.width * 0.12)
-    logo_ratio = logo_width / logo.width
-    logo_height = int(logo.height * logo_ratio)
-    logo = logo.resize((logo_width, logo_height), Image.LANCZOS)
+    # --- Resize + crop the logo to a perfect circle
+    logo_size = int(min(card.size) * 0.18)
+    logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
+    logo = circular_crop(logo)
 
-    # Create a rainbow-like gradient overlay for hologram effect
-    gradient = Image.new("RGBA", logo.size)
-    for y in range(logo.height):
-        for x in range(logo.width):
-            # Generate shifting rainbow colors
-            r = int(128 + 127 * ((x + y) % logo.width) / logo.width)
-            g = int(128 + 127 * ((y) % logo.height) / logo.height)
-            b = int(255 - ((x + y) % 128))
-            a = int(200)  # Semi-transparent
-            gradient.putpixel((x, y), (r, g, b, a))
+    # --- Create a subtle holographic shimmer overlay
+    hologram = Image.new("RGBA", logo.size, (255, 255, 255, 0))
+    holo_draw = ImageDraw.Draw(hologram)
+    for i in range(0, 360, 20):
+        color = (
+            int(128 + 127 * math.sin(math.radians(i))),
+            int(128 + 127 * math.sin(math.radians(i + 120))),
+            int(128 + 127 * math.sin(math.radians(i + 240))),
+            40
+        )
+        holo_draw.arc([5, 5, logo_size - 5, logo_size - 5], start=i, end=i + 30, fill=color, width=4)
+    logo = Image.alpha_composite(logo, hologram)
 
-    # Combine gradient with logo
-    holo_logo = Image.alpha_composite(logo, gradient)
+    # --- Add a soft light/shadow emboss
+    embossed = logo.filter(ImageFilter.SHARPEN)
+    enhancer = ImageEnhance.Contrast(embossed)
+    logo = enhancer.enhance(1.15)
 
-    # Optional: emboss or enhance brightness for depth
-    holo_logo = holo_logo.filter(ImageFilter.EMBOSS)
-    enhancer = ImageEnhance.Brightness(holo_logo)
-    holo_logo = enhancer.enhance(1.3)
+    # --- Position logo (bottom-right corner)
+    margin_x = int(card.width * 0.04)
+    margin_y = int(card.height * 0.04)
+    pos = (card.width - logo_size - margin_x, card.height - logo_size - margin_y)
+    card.alpha_composite(logo, dest=pos)
 
-    # Position logo bottom-right with margin
-    margin_x = int(card.width * 0.05)
-    margin_y = int(card.height * 0.03)
-    position = (card.width - logo_width - margin_x, card.height - logo_height - margin_y)
-
-    # Overlay holographic logo onto card
-    card.alpha_composite(holo_logo, dest=position)
-
-    # Save to memory buffer
-    img_bytes = io.BytesIO()
-    card.save(img_bytes, format="PNG")
-    img_bytes.seek(0)
-    return img_bytes
+    # --- Save to memory
+    output_bytes = io.BytesIO()
+    card.save(output_bytes, format="PNG")
+    output_bytes.seek(0)
+    return output_bytes
+    
 # -----------------------------
 # Telegram Handlers
 # -----------------------------
