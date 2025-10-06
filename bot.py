@@ -94,8 +94,8 @@ def circular_crop(img: Image.Image) -> Image.Image:
     result.paste(img, (0, 0), mask=mask)
     return result
 
-def add_embossed_logo_to_memory(card_image: Image.Image, logo_path="suimon_logo.png") -> io.BytesIO:
-     """
+def add_embossed_logo_to_memory(card_image: Image.Image, logo_path="suimon_logo.png"):
+    """
     Adds a premium, circular holographic SUIMON logo to the bottom-right corner of the card.
     The logo appears semi-transparent with metallic foil reflections and soft embossing.
     Returns the final composited card as a BytesIO stream.
@@ -156,6 +156,7 @@ def add_embossed_logo_to_memory(card_image: Image.Image, logo_path="suimon_logo.
     card.save(output, format="PNG")
     output.seek(0)
     return output
+
     
 # -----------------------------
 # Telegram Handlers
