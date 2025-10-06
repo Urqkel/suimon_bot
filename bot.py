@@ -1,5 +1,5 @@
 import os
-import io, math
+import io, math, random
 import base64
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -39,7 +39,7 @@ Footer: Weakness/resistance icons and flavor text above the reserved logo space
 Use foil or holographic effects for Legendary cards.
 Every card should have a vintage yet realistic feel.
 Do NOT place text or important elements in the reserved bottom area for the logo overlay.
-Add the official SUIMON logo subtly **embossed** or **engraved** into the card surface — giving it a realistic 3D texture, as though pressed into the card material, not floating above it.
+**embosse** or **engrave** the holographic logo into the card surface — giving it a realistic 3D texture, as though pressed into the card material, not floating above it.
 """
 
 # -----------------------------
@@ -97,7 +97,7 @@ def circular_crop(img: Image.Image) -> Image.Image:
 def add_premium_holographic_logo(card_image: Image.Image, logo_path="suimon_logo.png") -> io.BytesIO:
     """
     Adds a premium holographic circular SUIMON logo at the bottom-right corner.
-    Gives it a shimmering metallic effect for authenticity.
+    The effect uses multi-layered shimmer gradients to simulate metallic and holographic reflection.
     """
     card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
@@ -107,31 +107,39 @@ def add_premium_holographic_logo(card_image: Image.Image, logo_path="suimon_logo
     logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
     logo = circular_crop(logo)
 
-    # --- Create a subtle holographic shimmer overlay
-    hologram = Image.new("RGBA", logo.size, (255, 255, 255, 0))
-    holo_draw = ImageDraw.Draw(hologram)
-    for i in range(0, 360, 20):
-        color = (
-            int(128 + 127 * math.sin(math.radians(i))),
-            int(128 + 127 * math.sin(math.radians(i + 120))),
-            int(128 + 127 * math.sin(math.radians(i + 240))),
-            40
-        )
-        holo_draw.arc([5, 5, logo_size - 5, logo_size - 5], start=i, end=i + 30, fill=color, width=4)
-    logo = Image.alpha_composite(logo, hologram)
+   # Create a holographic shimmer overlay
+    holo_overlay = Image.new("RGBA", logo.size, (0, 0, 0, 0))
+    holo_draw = ImageDraw.Draw(holo_overlay)
 
-    # --- Add a soft light/shadow emboss
-    embossed = logo.filter(ImageFilter.SHARPEN)
-    enhancer = ImageEnhance.Contrast(embossed)
-    logo = enhancer.enhance(1.15)
+    for i in range(0, logo_size, 3):
+        r = int(128 + 127 * math.sin(i * 0.15))
+        g = int(128 + 127 * math.sin(i * 0.17 + 2))
+        b = int(128 + 127 * math.sin(i * 0.19 + 4))
+        alpha = random.randint(40, 90)
+        holo_draw.line([(0, i), (logo_size, i)], fill=(r, g, b, alpha), width=2)
 
-    # --- Position logo (bottom-right corner)
-    margin_x = int(card.width * 0.04)
-    margin_y = int(card.height * 0.04)
-    pos = (card.width - logo_size - margin_x, card.height - logo_size - margin_y)
-    card.alpha_composite(logo, dest=pos)
+    # Blur for smooth sheen and blend with logo
+    holo_overlay = holo_overlay.filter(ImageFilter.GaussianBlur(2))
+    holographic_logo = Image.alpha_composite(logo, holo_overlay)
 
-    # --- Save to memory
+    # Slight metallic sheen (contrast + brightness)
+    enhancer = ImageEnhance.Brightness(holographic_logo)
+    holographic_logo = enhancer.enhance(1.1)
+    enhancer = ImageEnhance.Contrast(holographic_logo)
+    holographic_logo = enhancer.enhance(1.2)
+
+    # Add outer soft glow
+    glow = holographic_logo.filter(ImageFilter.GaussianBlur(8))
+    combined = Image.new("RGBA", card.size, (0, 0, 0, 0))
+    pos = (
+        card.width - logo_size - int(card.width * 0.04),
+        card.height - logo_size - int(card.height * 0.04)
+    )
+    combined.paste(glow, pos, glow)
+    card = Image.alpha_composite(card, combined)
+    card.alpha_composite(holographic_logo, dest=pos)
+
+    # Save to memory
     output_bytes = io.BytesIO()
     card.save(output_bytes, format="PNG")
     output_bytes.seek(0)
