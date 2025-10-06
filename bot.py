@@ -77,30 +77,34 @@ def generate_suimon_card(image_bytes_io, prompt_text):
     card_b64 = response.data[0].b64_json
     return Image.open(io.BytesIO(base64.b64decode(card_b64)))
 
-def add_embossed_logo_to_card(card_image, logo_path="suimon_logo.png"):
+def add_embossed_logo_to_image(card_image, logo_path="suimon_logo.png"):
     """
-    Adds an embossed SUIMON logo to the bottom-right corner of a Pillow card image.
-    Returns the final card as a BytesIO object ready to send via Telegram.
+    Adds an embossed SUIMON logo to the bottom-right of a Pillow image.
+    Returns a BytesIO ready to send to Telegram.
     """
     card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
 
+    # Resize logo
     logo_width = int(card.width * 0.12)
     logo_ratio = logo_width / logo.width
     logo_height = int(logo.height * logo_ratio)
     logo = logo.resize((logo_width, logo_height), Image.LANCZOS)
 
+    # Emboss and enhance logo
     embossed_logo = logo.filter(ImageFilter.EMBOSS)
     enhancer = ImageEnhance.Brightness(embossed_logo)
     embossed_logo = enhancer.enhance(1.4)
 
+    # Position at bottom-right with margin
     margin_x = int(card.width * 0.03)
     margin_y = int(card.height * 0.03)
     pos = (card.width - logo_width - margin_x, card.height - logo_height - margin_y)
 
+    # Apply logo
     card.alpha_composite(embossed_logo, dest=pos)
 
-    # Save to memory buffer
+    # Save to BytesIO
     img_bytes = io.BytesIO()
     card.save(img_bytes, format="PNG")
     img_bytes.seek(0)
@@ -132,16 +136,8 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
-        # Generate the card based on the uploaded image
-        generated_card_path = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
-
-        # Add embossed logo
-        final_card_bytes = add_embossed_logo_to_memory(generated_card_path, "suimon_logo.png")
-
-        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="upload_photo")
-        output_bytes = io.BytesIO()
-        final_card.save(output_bytes, format="PNG")
-        output_bytes.seek(0)
+        card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
+        final_card_bytes = add_embossed_logo_to_image(card_image, SUIMON_LOGO_PATH)
 
         keyboard = [
             [InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]
