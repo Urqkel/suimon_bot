@@ -30,20 +30,20 @@ openai.api_key = OPENAI_API_KEY
 PROMPT_TEMPLATE = """
 Create a SUIMON digital trading card using the uploaded meme image as the main character.
 
-Include all design elements: name, HP, element, two attacks, flavor text, and themed background/frame.
-Top bar: Name, HP, elemental symbol
-Main art: Meme image dynamically styled
-Attack boxes: Two attacks with creative names, icons, and power
-Flavor text directly beneath attacks
-Footer: Weakness/resistance icons located to the left of the reserved foil stamp space
-Every card should have a vintage yet realistic feel.
-Leave a clear area at the bottom right corner for an official foil stamp overlay.
-Do NOT add or draw any logo, badge, circle, or placeholder in the bottom-right area. 
-Leave that space completely blank — the official SUIMON foil stamp will be added later by the system.
-The foil stamp is embossed into the card surface — giving it a realistic 3D texture, as though pressed into the card material, not floating above it.
+Design guidelines:
+- Maintain a clear, balanced layout with well-spaced elements.
+- Top bar: Place the character name on the left, HP text on the right, and the elemental symbol beside the HP, ensuring they do not overlap.
+- Leave at least 10% horizontal spacing between the HP number and any icons or symbols.
+- Include all standard card elements: name, element, HP, two attacks, flavor text, and themed background/frame.
+- Main art: Use the uploaded meme image as the character art, dynamically styled.
+- Attack boxes: Two attacks with creative names, icons, and power.
+- Flavor text directly beneath attacks.
+- Footer: Weakness/resistance icons located to the left of the reserved foil stamp space.
+- Leave a clear area in the bottom-right corner for an official foil stamp overlay (do not draw over it).
+- Overall feel: vintage, realistic, collectible, premium quality with subtle foil lighting or embossed textures.
 """
 
-# -----------------------------
+#
 # Helper functions
 # -----------------------------
 def generate_suimon_card(image_bytes_io, prompt_text):
