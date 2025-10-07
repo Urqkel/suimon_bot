@@ -19,7 +19,7 @@ import openai
 # -----------------------------
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-SUIMON_LOGO_PATH = "assets/suimon_logo.png"
+FOIL_STAMP_PATH = "Assets/Foil_Stamp.png"
 WEBHOOK_PATH = "/telegram_webhook"
 PORT = int(os.environ.get("PORT", 10000))
 DOMAIN = os.getenv("RENDER_EXTERNAL_URL", "https://your-render-domain.com")
@@ -76,27 +76,10 @@ def generate_suimon_card(image_bytes_io, prompt_text):
     card_b64 = response.data[0].b64_json
     return Image.open(io.BytesIO(base64.b64decode(card_b64)))
 
-def circular_crop(img: Image.Image) -> Image.Image:
-    """Crop an image to a perfect circle with transparency."""
-    img = img.convert("RGBA")
-    size = min(img.size)
-    mask = Image.new("L", (size, size), 0)
-    draw = ImageDraw.Draw(mask)
-    draw.ellipse((0, 0, size, size), fill=255)
-
-    # Center crop the image to a square before masking
-    x = (img.width - size) // 2
-    y = (img.height - size) // 2
-    img = img.crop((x, y, x + size, y + size))
-
-    result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    result.paste(img, (0, 0), mask=mask)
-    return result
-
-def add_embossed_logo_to_memory(card_image: Image.Image, logo_path="suimon_logo.png"):
+def add_embossed_logo_to_memory(card_image: Image.Image, logo_path="Foil_Stamp.png"):
     """
-    Adds a premium, circular holographic SUIMON logo to the bottom-right corner of the card.
-    The logo appears semi-transparent with metallic foil reflections and soft embossing.
+    Adds a premium, circular foil stamp to the bottom-right corner of the card.
+    The foil stamp has metallic foil reflections and premium embossing.
     Returns the final composited card as a BytesIO stream.
     """
     # Ensure RGBA for proper alpha handling
@@ -184,7 +167,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
-        final_card_bytes = add_embossed_logo_to_memory(card_image, SUIMON_LOGO_PATH)
+        final_card_bytes = add_embossed_logo_to_memory(card_image, FOIL_STAMP_PATH)
 
         keyboard = [
             [InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]
