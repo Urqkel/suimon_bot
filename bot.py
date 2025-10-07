@@ -37,7 +37,9 @@ Main art: Meme image dynamically styled
 Attack boxes: Two attacks with creative names, icons, and power
 Footer: Weakness/resistance icons and flavor text above the reserved logo space
 Every card should have a vintage yet realistic feel.
-Do NOT place text or important elements in the reserved bottom area for the foil stamp overlay.
+Leave a clear area at the bottom right corner for an official foil stamp overlay.
+Do NOT add or draw any logo, badge, circle, or placeholder in the bottom-right area. 
+Leave that space completely blank — the official SUIMON foil stamp will be added later by the system.
 The foil stamp is embossed into the card surface — giving it a realistic 3D texture, as though pressed into the card material, not floating above it.
 """
 
@@ -76,69 +78,85 @@ def generate_suimon_card(image_bytes_io, prompt_text):
     card_b64 = response.data[0].b64_json
     return Image.open(io.BytesIO(base64.b64decode(card_b64)))
 
-def add_embossed_logo_to_memory(card_image: Image.Image, logo_path="Foil_Stamp.png"):
+def add_embossed_logo_to_memory(card_image: Image.Image, logo_path=FOIL_STAMP_PATH):
     """
-    Adds a premium, circular foil stamp to the bottom-right corner of the card.
-    The foil stamp has metallic foil reflections and premium embossing.
-    Returns the final composited card as a BytesIO stream.
+    Adds the official SUIMON foil stamp to the bottom-right corner of the card.
+    Includes realistic embossing, metallic tone, and a light reflection streak.
+    Returns the composited card as BytesIO.
     """
-    # Ensure RGBA for proper alpha handling
+    from PIL import ImageChops
+
+    # ---- Step 1: Prepare base images ----
     card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
 
-    # ---- Step 1: Circular crop ----
+    # Circular crop (to ensure perfectly round logo)
     size = min(logo.size)
     mask = Image.new("L", (size, size), 0)
     draw = ImageDraw.Draw(mask)
     draw.ellipse((0, 0, size, size), fill=255)
-    logo_cropped = logo.crop(((logo.width - size)//2, (logo.height - size)//2,
-                              (logo.width + size)//2, (logo.height + size)//2))
+    logo_cropped = logo.crop((
+        (logo.width - size)//2, (logo.height - size)//2,
+        (logo.width + size)//2, (logo.height + size)//2
+    ))
     logo_cropped.putalpha(mask)
 
-    # ---- Step 2: Resize & position ----
+    # ---- Step 2: Resize and positioning ----
     logo_width = int(card.width * 0.14)
     logo_ratio = logo_width / logo_cropped.width
     logo_height = int(logo_cropped.height * logo_ratio)
     logo_resized = logo_cropped.resize((logo_width, logo_height), Image.LANCZOS)
-    margin_x = int(card.width * 0.03)
-    margin_y = int(card.height * 0.03)
+
+    margin_x = int(card.width * 0.035)
+    margin_y = int(card.height * 0.035)
     pos = (card.width - logo_width - margin_x, card.height - logo_height - margin_y)
 
-    # ---- Step 3: Apply foil-like color modulation ----
-    # Create subtle metallic overlay (blue–silver tint)
+    # ---- Step 3: Metallic reflection pass ----
     foil_overlay = Image.new("RGBA", logo_resized.size)
     for x in range(logo_resized.width):
         for y in range(logo_resized.height):
             r, g, b, a = logo_resized.getpixel((x, y))
             if a > 0:
-                # Gentle metallic gradient modulation
-                shift = int(40 * (x / logo_resized.width))  # blue-to-silver sweep
-                foil_overlay.putpixel((x, y), (r + shift, g + shift, min(255, b + 80), int(a * 0.5)))
+                shift = int(30 * (x / logo_resized.width))
+                foil_overlay.putpixel(
+                    (x, y),
+                    (min(255, r + shift), min(255, g + shift), min(255, b + 50), int(a * 0.4))
+                )
             else:
                 foil_overlay.putpixel((x, y), (0, 0, 0, 0))
 
-    # Blend original + metallic overlay
-    logo_metallic = Image.blend(logo_resized, foil_overlay, 0.5)
+    logo_reflective = ImageChops.screen(logo_resized, foil_overlay)
+    logo_reflective.putalpha(210)
 
-    # ---- Step 4: Add soft embossing ----
-    embossed = logo_metallic.filter(ImageFilter.EMBOSS)
-    blended = Image.blend(logo_metallic, embossed, 0.4)
+    # ---- Step 4: Add subtle light streak for realism ----
+    glint = Image.new("RGBA", logo_reflective.size, (0, 0, 0, 0))
+    glint_draw = ImageDraw.Draw(glint)
 
-    # ---- Step 5: Light edge highlight for authenticity feel ----
-    edge = Image.new("RGBA", blended.size, (255, 255, 255, 0))
-    edge_draw = ImageDraw.Draw(edge)
-    edge_draw.ellipse((2, 2, blended.width-2, blended.height-2), outline=(255, 255, 255, 60), width=3)
-    blended = Image.alpha_composite(blended, edge)
+    # Diagonal light streak (top-left to bottom-right)
+    for i in range(-logo_reflective.width, logo_reflective.width, 4):
+        brightness = int(60 - abs(i) * 0.3)
+        if brightness > 0:
+            glint_draw.line(
+                [(i, 0), (i + logo_reflective.height, logo_reflective.height)],
+                fill=(255, 255, 255, brightness),
+                width=3
+            )
 
-    # ---- Step 6: Composite onto the card ----
-    card.alpha_composite(blended, dest=pos)
+    logo_final = ImageChops.screen(logo_reflective, glint)
+
+    # ---- Step 5: Soft embossing for tactile feel ----
+    embossed = logo_final.filter(ImageFilter.EMBOSS)
+    logo_embossed = Image.blend(logo_final, embossed, 0.35)
+
+    # ---- Step 6: Composite cleanly onto the card ----
+    composited = card.copy()
+    composited.alpha_composite(logo_embossed, dest=pos)
 
     # ---- Step 7: Export to memory ----
     output = io.BytesIO()
-    card.save(output, format="PNG")
+    composited.save(output, format="PNG")
     output.seek(0)
     return output
-
     
 # -----------------------------
 # Telegram Handlers
