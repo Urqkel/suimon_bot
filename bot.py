@@ -41,7 +41,7 @@ Design guidelines:
 - Attack boxes: Two attacks with creative names, icons, and power.
 - Flavor text directly beneath attacks.
 - Footer: Weakness/resistance icons located to the left of the reserved foil stamp space.
-- Leave a clear area in the bottom-right corner for an official foil stamp overlay (do not draw over it or create a border, it must be blank).
+- Leave a blank area in the bottom-right corner for an official foil stamp overlay (do not draw over it or create a border, it must be blank space).
 - The foil stamp is embossed into the card surface — giving it a realistic 3D texture, as though pressed into the card material, not floating above it.
 - Overall feel: vintage, realistic, collectible, with subtle foil lighting or embossed textures.
 """
