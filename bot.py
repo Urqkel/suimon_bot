@@ -30,11 +30,12 @@ openai.api_key = OPENAI_API_KEY
 PROMPT_TEMPLATE = """
 Create a SUIMON digital trading card using the uploaded meme image as the main character.
 
-Include all design elements: name, element, HP, rarity, two attacks, flavor text, and themed background/frame.
+Include all design elements: name, HP, element, two attacks, flavor text, and themed background/frame.
 Top bar: Name, HP, elemental symbol
 Main art: Meme image dynamically styled
 Attack boxes: Two attacks with creative names, icons, and power
-Footer: Weakness/resistance icons and flavor text above the reserved logo space
+Flavor text directly beneath attacks
+Footer: Weakness/resistance icons located to the left of the reserved foil stamp space
 Every card should have a vintage yet realistic feel.
 Leave a clear area at the bottom right corner for an official foil stamp overlay.
 Do NOT add or draw any logo, badge, circle, or placeholder in the bottom-right area. 
@@ -78,29 +79,35 @@ def generate_suimon_card(image_bytes_io, prompt_text):
     return Image.open(io.BytesIO(base64.b64decode(card_b64)))
 
 def add_foil_stamp(card_image: Image.Image, logo_path="Assets/Foil_Stamp.png"):
-    """Places the provided foil PNG in the bottom-right corner with natural transparency."""
+    """
+    Adds a foil stamp overlay to the bottom-right corner of the card.
+    Uses environment variables FOIL_SCALE and FOIL_MARGIN for positioning.
+    """
     card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
 
-    # scale logo (adjust 0.14 as needed)
-    logo_width = int(card.width * 0.14)
+    # 🔧 Adjustable parameters
+    foil_scale = float(os.getenv("FOIL_SCALE", 0.14))   # default 14% of card width
+    foil_margin = float(os.getenv("FOIL_MARGIN", 0.04)) # default 4% from edges
+
+    # Resize based on card width
+    logo_width = int(card.width * foil_scale)
     logo_ratio = logo_width / logo.width
     logo_height = int(logo.height * logo_ratio)
-    logo = logo.resize((logo_width, logo_height), Image.LANCZOS)
+    logo_resized = logo.resize((logo_width, logo_height), Image.LANCZOS)
 
-    # position bottom-right with margin
-    margin_x = int(card.width * 0.03)
-    margin_y = int(card.height * 0.03)
-    pos = (card.width - logo_width - margin_x, card.height - logo_height - margin_y)
+    # Position at bottom-right corner
+    pos_x = int(card.width - logo_width - card.width * foil_margin)
+    pos_y = int(card.height - logo_height - card.height * foil_margin)
 
-    # composite directly—no filters, no recoloring
-    card.alpha_composite(logo, dest=pos)
+    # Composite onto card (preserves transparency)
+    card.alpha_composite(logo_resized, dest=(pos_x, pos_y))
 
+    # Save to memory
     output = io.BytesIO()
     card.save(output, format="PNG")
     output.seek(0)
     return output
-
     
 # -----------------------------
 # Telegram Handlers
