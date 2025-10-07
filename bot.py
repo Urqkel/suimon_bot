@@ -31,7 +31,6 @@ PROMPT_TEMPLATE = """
 Create a SUIMON digital trading card using the uploaded meme image as the main character.
 
 Include all design elements: name, element, HP, rarity, two attacks, flavor text, and themed background/frame.
-Leave a clear area at the bottom right corner for an official foil stamp overlay.
 Top bar: Name, HP, elemental symbol
 Main art: Meme image dynamically styled
 Attack boxes: Two attacks with creative names, icons, and power
@@ -78,85 +77,30 @@ def generate_suimon_card(image_bytes_io, prompt_text):
     card_b64 = response.data[0].b64_json
     return Image.open(io.BytesIO(base64.b64decode(card_b64)))
 
-def add_embossed_logo_to_memory(card_image: Image.Image, logo_path=FOIL_STAMP_PATH):
-    """
-    Adds the official SUIMON foil stamp to the bottom-right corner of the card.
-    Includes realistic embossing, metallic tone, and a light reflection streak.
-    Returns the composited card as BytesIO.
-    """
-    from PIL import ImageChops
-
-    # ---- Step 1: Prepare base images ----
+def add_foil_stamp(card_image: Image.Image, logo_path="Assets/Foil_Stamp.png"):
+    """Places the provided foil PNG in the bottom-right corner with natural transparency."""
     card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
 
-    # Circular crop (to ensure perfectly round logo)
-    size = min(logo.size)
-    mask = Image.new("L", (size, size), 0)
-    draw = ImageDraw.Draw(mask)
-    draw.ellipse((0, 0, size, size), fill=255)
-    logo_cropped = logo.crop((
-        (logo.width - size)//2, (logo.height - size)//2,
-        (logo.width + size)//2, (logo.height + size)//2
-    ))
-    logo_cropped.putalpha(mask)
-
-    # ---- Step 2: Resize and positioning ----
+    # scale logo (adjust 0.14 as needed)
     logo_width = int(card.width * 0.14)
-    logo_ratio = logo_width / logo_cropped.width
-    logo_height = int(logo_cropped.height * logo_ratio)
-    logo_resized = logo_cropped.resize((logo_width, logo_height), Image.LANCZOS)
+    logo_ratio = logo_width / logo.width
+    logo_height = int(logo.height * logo_ratio)
+    logo = logo.resize((logo_width, logo_height), Image.LANCZOS)
 
-    margin_x = int(card.width * 0.035)
-    margin_y = int(card.height * 0.035)
+    # position bottom-right with margin
+    margin_x = int(card.width * 0.03)
+    margin_y = int(card.height * 0.03)
     pos = (card.width - logo_width - margin_x, card.height - logo_height - margin_y)
 
-    # ---- Step 3: Metallic reflection pass ----
-    foil_overlay = Image.new("RGBA", logo_resized.size)
-    for x in range(logo_resized.width):
-        for y in range(logo_resized.height):
-            r, g, b, a = logo_resized.getpixel((x, y))
-            if a > 0:
-                shift = int(30 * (x / logo_resized.width))
-                foil_overlay.putpixel(
-                    (x, y),
-                    (min(255, r + shift), min(255, g + shift), min(255, b + 50), int(a * 0.4))
-                )
-            else:
-                foil_overlay.putpixel((x, y), (0, 0, 0, 0))
+    # composite directly—no filters, no recoloring
+    card.alpha_composite(logo, dest=pos)
 
-    logo_reflective = ImageChops.screen(logo_resized, foil_overlay)
-    logo_reflective.putalpha(210)
-
-    # ---- Step 4: Add subtle light streak for realism ----
-    glint = Image.new("RGBA", logo_reflective.size, (0, 0, 0, 0))
-    glint_draw = ImageDraw.Draw(glint)
-
-    # Diagonal light streak (top-left to bottom-right)
-    for i in range(-logo_reflective.width, logo_reflective.width, 4):
-        brightness = int(60 - abs(i) * 0.3)
-        if brightness > 0:
-            glint_draw.line(
-                [(i, 0), (i + logo_reflective.height, logo_reflective.height)],
-                fill=(255, 255, 255, brightness),
-                width=3
-            )
-
-    logo_final = ImageChops.screen(logo_reflective, glint)
-
-    # ---- Step 5: Soft embossing for tactile feel ----
-    embossed = logo_final.filter(ImageFilter.EMBOSS)
-    logo_embossed = Image.blend(logo_final, embossed, 0.35)
-
-    # ---- Step 6: Composite cleanly onto the card ----
-    composited = card.copy()
-    composited.alpha_composite(logo_embossed, dest=pos)
-
-    # ---- Step 7: Export to memory ----
     output = io.BytesIO()
-    composited.save(output, format="PNG")
+    card.save(output, format="PNG")
     output.seek(0)
     return output
+
     
 # -----------------------------
 # Telegram Handlers
@@ -185,7 +129,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
-        final_card_bytes = add_embossed_logo_to_memory(card_image, FOIL_STAMP_PATH)
+        final_card_bytes = add_foil_stamp(card_image, FOIL_STAMP_PATH)
 
         keyboard = [
             [InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]
