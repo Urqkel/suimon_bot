@@ -232,7 +232,10 @@ ptb_app.add_handler(CallbackQueryHandler(button_callback))
 # -----------------------------
 fastapi_app = FastAPI()
 ptb_app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+# Register handlers AFTER ptb_app is created
 ptb_app.add_handler(CommandHandler("start", start))
+ptb_app.add_handler(CommandHandler("generate", generate))
 ptb_app.add_handler(MessageHandler(filters.PHOTO, handle_image))
 ptb_app.add_handler(CallbackQueryHandler(button_callback))
 
@@ -248,4 +251,5 @@ async def telegram_webhook(req: Request):
     update = Update.de_json(data, ptb_app.bot)
     await ptb_app.update_queue.put(update)
     return {"ok": True}
+
 
