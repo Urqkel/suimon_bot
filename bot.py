@@ -233,23 +233,29 @@ ptb_app.add_handler(CallbackQueryHandler(button_callback))
 fastapi_app = FastAPI()
 ptb_app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-# Register handlers AFTER ptb_app is created
+# -----------------------------
+# Register Handlers AFTER ptb_app is created
+# -----------------------------
 ptb_app.add_handler(CommandHandler("start", start))
 ptb_app.add_handler(CommandHandler("generate", generate))
 ptb_app.add_handler(MessageHandler(filters.PHOTO, handle_image))
 ptb_app.add_handler(CallbackQueryHandler(button_callback))
 
+# -----------------------------
+# Startup event to initialize PTB and set webhook
+# -----------------------------
 @fastapi_app.on_event("startup")
 async def startup_event():
     await ptb_app.initialize()
     await ptb_app.start()
     await ptb_app.bot.set_webhook(WEBHOOK_URL)
 
+# -----------------------------
+# Webhook endpoint
+# -----------------------------
 @fastapi_app.post(WEBHOOK_PATH)
 async def telegram_webhook(req: Request):
     data = await req.json()
     update = Update.de_json(data, ptb_app.bot)
     await ptb_app.update_queue.put(update)
     return {"ok": True}
-
-
