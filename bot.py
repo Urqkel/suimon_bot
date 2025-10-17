@@ -41,7 +41,7 @@ Layout & spacing rules:
 - Top bar: Place the character name on the left, and always render “HP” followed by the number (e.g. HP100) on the right side.
   The HP text must be completely visible, never cropped, never stylized, and always use a clean card font.
   Place the elemental icon beside the HP number, leaving at least 15% horizontal spacing so they do not touch or overlap.
-- Main art: Use the uploaded meme image as the main character illustration.
+- Main art: Use the uploaded meme image as the character art, dynamically styled without changing the underlying character in the meme (remove or ignore the word SUIMON if present in the uploaded image). 
 - Attack boxes: Include two creative attacks with names, icons, and damage numbers.
 - Flavor text: Include EXACTLY ONE short, unique line beneath the attacks (no repetition or duplication).
 - Footer: Weakness/resistance icons should be on the left. Leave a clear empty area in the bottom-right corner for an official foil stamp.
