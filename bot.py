@@ -11,7 +11,7 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from PIL import Image, ImageEnhance, ImageFilter, ImageDraw
+from PIL import Image, ImageEnhance, ImageFilter
 import openai
 
 # -----------------------------
@@ -35,45 +35,44 @@ Design guidelines:
 - NEVER use the word "SUIMON" as the character name.
 - Maintain a balanced layout with well-spaced elements.
 - Include all standard card elements: name, HP, element, two attacks, flavor text, and themed background/frame.
-- Top bar: Place the character name on the left, HP text on the right, and the elemental symbol beside the HP, ensuring they do not overlap.
-- Leave at least 10% horizontal spacing between the HP number and any icons or symbols.
-- Main art: Use the uploaded meme image as the character art, dynamically styled.
-- Attack boxes: Two attacks with creative names, icons, and power.
-- Flavor text directly beneath attacks.
-- Footer: Weakness/resistance icons located to the left of the reserved foil stamp space.
-- Leave a blank area in the bottom-right corner for an official foil stamp overlay (do not draw over it or create a border, it must be blank space).
-- The foil stamp is embossed into the card surface — giving it a realistic 3D texture, as though pressed into the card material, not floating above it.
+
+Layout & spacing rules:
+- Top bar: Place the character name on the left, HP text on the right, and the elemental symbol beside the HP.
+  Always ensure the HP number and symbol are fully visible and never overlap or touch.
+  Maintain at least 15% horizontal spacing between HP text and symbol edges.
+- Main art: Use the uploaded meme image as the main character, stylized dynamically.
+- Attack boxes: Include two attacks with creative names, icons, and power.
+- Flavor text: Include EXACTLY ONE short line of unique flavor text beneath the attacks.
+  Do not repeat or restate the same flavor text line anywhere on the card.
+- Footer: Weakness/resistance icons should appear on the left side, and leave a blank space in the bottom-right corner for the official foil stamp overlay.
+- The foil stamp area must remain completely empty and unobstructed.
+- The foil stamp is embossed into the card surface — pressed into the material, not floating above it.
 - Overall feel: vintage, realistic, collectible, with subtle foil lighting or embossed textures.
 """
 
-#
+# -----------------------------
 # Helper functions
 # -----------------------------
 def generate_suimon_card(image_bytes_io, prompt_text):
     """
     Generate a SUIMON card using the uploaded meme image as the base for the character.
-    Supports JPEG and PNG.
-    Returns the card image as a Pillow object.
+    Returns the generated card as a Pillow Image object.
     """
     image_bytes_io.seek(0)
-
-    # Ensure the file is PNG (best for edit API)
     img = Image.open(image_bytes_io)
     if img.mode != "RGBA":
         img = img.convert("RGBA")
 
-    # Save to BytesIO with a name attribute to pass correct mimetype
     img_bytes_io = io.BytesIO()
     img.save(img_bytes_io, format="PNG")
-    img_bytes_io.name = "meme.png"  # important for API to detect correct mimetype
+    img_bytes_io.name = "meme.png"
     img_bytes_io.seek(0)
 
-    # Full prompt
     full_prompt = f"Use the uploaded image as the main character for a SUIMON card. {prompt_text}"
 
     response = openai.images.edit(
         model="gpt-image-1",
-        image=img_bytes_io,  # pass BytesIO with name
+        image=img_bytes_io,
         prompt=full_prompt,
         size="1024x1536"
     )
@@ -81,50 +80,53 @@ def generate_suimon_card(image_bytes_io, prompt_text):
     card_b64 = response.data[0].b64_json
     return Image.open(io.BytesIO(base64.b64decode(card_b64)))
 
+
 def add_foil_stamp(card_image: Image.Image, logo_path="Assets/Foil_Stamp.png"):
     """
-    Adds a foil stamp overlay to the bottom-right corner of the card.
-    Uses environment variables FOIL_SCALE and FOIL_MARGIN for positioning.
+    Adds an embossed foil stamp overlay to the bottom-right corner of the card.
+    Ensures it does not overlap text and appears pressed into the surface.
     """
     card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
 
-    # 🔧 Adjustable parameters
-    foil_scale = float(os.getenv("FOIL_SCALE", 0.14))   # default 14% of card width
-    foil_margin = float(os.getenv("FOIL_MARGIN", 0.04)) # default 4% from edges
+    foil_scale = float(os.getenv("FOIL_SCALE", 0.13))
+    foil_margin = float(os.getenv("FOIL_MARGIN", 0.05))
 
-    # Resize based on card width
+    # Resize foil
     logo_width = int(card.width * foil_scale)
-    logo_ratio = logo_width / logo.width
-    logo_height = int(logo.height * logo_ratio)
+    ratio = logo_width / logo.width
+    logo_height = int(logo.height * ratio)
     logo_resized = logo.resize((logo_width, logo_height), Image.LANCZOS)
 
-    # Position at bottom-right corner
+    # Adjust position slightly upward to avoid text overlap
     pos_x = int(card.width - logo_width - card.width * foil_margin)
-    pos_y = int(card.height - logo_height - card.height * foil_margin)
+    pos_y = int(card.height - logo_height - card.height * (foil_margin + 0.015))
 
-    # Composite onto card (preserves transparency)
-    card.alpha_composite(logo_resized, dest=(pos_x, pos_y))
+    # Create embossed effect
+    embossed = logo_resized.filter(ImageFilter.EMBOSS)
+    embossed = ImageEnhance.Brightness(embossed).enhance(1.1)
+    embossed = ImageEnhance.Contrast(embossed).enhance(1.3)
 
-    # Save to memory
+    # Blend slightly darker to simulate press depth
+    darker = ImageEnhance.Brightness(logo_resized).enhance(0.85)
+    card.alpha_composite(darker, dest=(pos_x, pos_y))
+    card.alpha_composite(embossed, dest=(pos_x, pos_y))
+
     output = io.BytesIO()
     card.save(output, format="PNG")
     output.seek(0)
     return output
-    
+
 # -----------------------------
 # Telegram Handlers
 # -----------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Welcome to SUIMON card creator! Send me a Suimon meme and I'll generate a unique card for you."
+        "Welcome to SUIMON card creator! Send me a meme and I’ll craft a unique collectible SUIMON card for you 🃏"
     )
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Notify user the card is being generated
-    await update.message.reply_text(
-        "🎨 Your SUIMON card is being generated! This may take a few minutes..."
-    )
+    await update.message.reply_text("🎨 Generating your SUIMON card... please wait a moment!")
 
     chat_type = update.effective_chat.type
     user_mention = update.message.from_user.mention_html() if chat_type in ["group", "supergroup"] else ""
@@ -141,15 +143,13 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
         final_card_bytes = add_foil_stamp(card_image, FOIL_STAMP_PATH)
 
-        keyboard = [
-            [InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]
-        ]
+        keyboard = [[InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        caption_text = f"{user_mention} Here’s your SUIMON card! 🃏" if user_mention else "Here’s your SUIMON card! 🃏"
+        caption = f"{user_mention} Here’s your SUIMON card! 🃏" if user_mention else "Here’s your SUIMON card! 🃏"
 
         await update.message.reply_photo(
             photo=final_card_bytes,
-            caption=caption_text,
+            caption=caption,
             parse_mode="HTML",
             reply_markup=reply_markup,
         )
@@ -161,12 +161,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if query.data == "create_another":
-        await query.message.reply_text(
-            "Awesome! Send me a new meme image, and I'll make another SUIMON card for you."
-        )
+        await query.message.reply_text("Awesome! Send me a new meme image, and I'll make another SUIMON card for you.")
 
 # -----------------------------
-# FastAPI + PTB
+# FastAPI + PTB Integration
 # -----------------------------
 fastapi_app = FastAPI()
 ptb_app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -186,3 +184,4 @@ async def telegram_webhook(req: Request):
     update = Update.de_json(data, ptb_app.bot)
     await ptb_app.update_queue.put(update)
     return {"ok": True}
+
