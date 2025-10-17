@@ -214,3 +214,10 @@ async def telegram_webhook(req: Request):
     update = Update.de_json(data, ptb_app.bot)
     await ptb_app.update_queue.put(update)
     return {"ok": True}
+
+# -----------------------------
+# Health Check Endpoint
+# -----------------------------
+@fastapi_app.get("/health")
+async def health_check():
+    return {"status": "ok"}
