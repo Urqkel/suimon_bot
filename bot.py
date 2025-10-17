@@ -1,6 +1,7 @@
 import os
 import io, math, random
 import base64
+import pytesseract
 from fastapi import FastAPI, Request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -37,17 +38,16 @@ Design guidelines:
 - Include all standard card elements: name, HP, element, two attacks, flavor text, and themed background/frame.
 
 Layout & spacing rules:
-- Top bar: Place the character name on the left, HP text on the right, and the elemental symbol beside the HP.
-  Always ensure the HP number and symbol are fully visible and never overlap or touch.
-  Maintain at least 15% horizontal spacing between HP text and symbol edges.
-- Main art: Use the uploaded meme image as the main character, stylized dynamically.
-- Attack boxes: Include two attacks with creative names, icons, and power.
-- Flavor text: Include EXACTLY ONE short line of unique flavor text beneath the attacks.
-  Do not repeat or restate the same flavor text line anywhere on the card.
-- Footer: Weakness/resistance icons should appear on the left side, and leave a blank space in the bottom-right corner for the official foil stamp overlay.
-- The foil stamp area must remain completely empty and unobstructed.
-- The foil stamp is embossed into the card surface — pressed into the material, not floating above it.
-- Overall feel: vintage, realistic, collectible, with subtle foil lighting or embossed textures.
+- Top bar: Place the character name on the left, and always render “HP” followed by the number (e.g. HP100) on the right side.
+  The HP text must be completely visible, never cropped, never stylized, and always use a clean card font.
+  Place the elemental icon beside the HP number, leaving at least 15% horizontal spacing so they do not touch or overlap.
+- Main art: Use the uploaded meme image as the main character illustration.
+- Attack boxes: Include two creative attacks with names, icons, and damage numbers.
+- Flavor text: Include EXACTLY ONE short, unique line beneath the attacks (no repetition or duplication).
+- Footer: Weakness/resistance icons should be on the left. Leave a clear empty area in the bottom-right corner for an official foil stamp.
+- The foil stamp area must stay completely blank — do not draw or add any art or borders there.
+- The foil stamp is a subtle circular authenticity mark that will be imprinted later.
+- Overall aesthetic: vintage, realistic, collectible, with slight texture and warmth, but without altering any provided logos.
 """
 
 # -----------------------------
@@ -83,8 +83,8 @@ def generate_suimon_card(image_bytes_io, prompt_text):
 
 def add_foil_stamp(card_image: Image.Image, logo_path="Assets/Foil_Stamp.png"):
     """
-    Adds an embossed foil stamp overlay to the bottom-right corner of the card.
-    Ensures it does not overlap text and appears pressed into the surface.
+    Places the official foil stamp (unchanged) into the bottom-right clear space.
+    Keeps original transparency and circular shape.
     """
     card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
@@ -92,30 +92,50 @@ def add_foil_stamp(card_image: Image.Image, logo_path="Assets/Foil_Stamp.png"):
     foil_scale = float(os.getenv("FOIL_SCALE", 0.13))
     foil_margin = float(os.getenv("FOIL_MARGIN", 0.05))
 
-    # Resize foil
     logo_width = int(card.width * foil_scale)
     ratio = logo_width / logo.width
     logo_height = int(logo.height * ratio)
     logo_resized = logo.resize((logo_width, logo_height), Image.LANCZOS)
 
-    # Adjust position slightly upward to avoid text overlap
     pos_x = int(card.width - logo_width - card.width * foil_margin)
-    pos_y = int(card.height - logo_height - card.height * (foil_margin + 0.015))
+    pos_y = int(card.height - logo_height - card.height * foil_margin)
 
-    # Create embossed effect
-    embossed = logo_resized.filter(ImageFilter.EMBOSS)
-    embossed = ImageEnhance.Brightness(embossed).enhance(1.1)
-    embossed = ImageEnhance.Contrast(embossed).enhance(1.3)
-
-    # Blend slightly darker to simulate press depth
-    darker = ImageEnhance.Brightness(logo_resized).enhance(0.85)
-    card.alpha_composite(darker, dest=(pos_x, pos_y))
-    card.alpha_composite(embossed, dest=(pos_x, pos_y))
+    # Composite the logo cleanly without altering colors or opacity
+    card.alpha_composite(logo_resized, dest=(pos_x, pos_y))
 
     output = io.BytesIO()
     card.save(output, format="PNG")
     output.seek(0)
     return output
+
+def check_hp_visibility(card_image: Image.Image):
+    """
+    Runs OCR on the generated card to confirm that 'HP' appears visibly.
+    Returns True if 'HP' is found, otherwise False.
+    """
+    try:
+        text = pytesseract.image_to_string(card_image)
+        return "HP" in text.upper()
+    except Exception:
+        return False
+
+def check_flavor_text(card_image: Image.Image):
+    """
+    Uses OCR to detect and analyze flavor text lines at the bottom of the card.
+    Returns True if flavor text appears only once (no duplicates), False otherwise.
+    """
+    try:
+        text = pytesseract.image_to_string(card_image)
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        # Find likely flavor text lines (short sentences, not labels like 'Weakness')
+        flavor_candidates = [ln for ln in lines if 5 < len(ln) < 80 and "weak" not in ln.lower() and "resist" not in ln.lower()]
+        # Remove exact duplicates
+        unique_lines = list(dict.fromkeys(flavor_candidates))
+        # If duplicates exist, return False
+        return len(flavor_candidates) == len(unique_lines)
+    except Exception:
+        return True  # Fallback to pass silently if OCR fails
+
 
 # -----------------------------
 # Telegram Handlers
@@ -141,7 +161,17 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
-        final_card_bytes = add_foil_stamp(card_image, FOIL_STAMP_PATH)
+
+# 🩺 Quality checks
+hp_ok = check_hp_visibility(card_image)
+flavor_ok = check_flavor_text(card_image)
+
+if not hp_ok:
+    print("⚠️ Warning: HP text not detected on generated card.")
+if not flavor_ok:
+    print("⚠️ Warning: Duplicate flavor text detected on generated card.")
+
+final_card_bytes = add_foil_stamp(card_image, FOIL_STAMP_PATH)
 
         keyboard = [[InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
