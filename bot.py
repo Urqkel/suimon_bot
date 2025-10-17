@@ -162,16 +162,16 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         card_image = generate_suimon_card(meme_bytes_io, PROMPT_TEMPLATE)
 
-# 🩺 Quality checks
-hp_ok = check_hp_visibility(card_image)
-flavor_ok = check_flavor_text(card_image)
+        # 🩺 Quality checks
+        hp_ok = check_hp_visibility(card_image)
+        flavor_ok = check_flavor_text(card_image)
 
-if not hp_ok:
-    print("⚠️ Warning: HP text not detected on generated card.")
-if not flavor_ok:
-    print("⚠️ Warning: Duplicate flavor text detected on generated card.")
+        if not hp_ok:
+            print("⚠️ Warning: HP text not detected on generated card.")
+        if not flavor_ok:
+            print("⚠️ Warning: Duplicate flavor text detected on generated card.")
 
-final_card_bytes = add_foil_stamp(card_image, FOIL_STAMP_PATH)
+        final_card_bytes = add_foil_stamp(card_image, FOIL_STAMP_PATH)
 
         keyboard = [[InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
