@@ -3,3 +3,4 @@ fastapi
 uvicorn
 pillow
 openai
+pytesseract
