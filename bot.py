@@ -83,24 +83,28 @@ def generate_suimon_card(image_bytes_io, prompt_text):
 
 def add_foil_stamp(card_image: Image.Image, logo_path="Assets/Foil_Stamp.png"):
     """
-    Places the official foil stamp (unchanged) into the bottom-right clear space.
-    Keeps original transparency and circular shape.
+    Places the official foil stamp into the card.
+    FOIL_SCALE, FOIL_MARGIN, FOIL_X_OFFSET, FOIL_Y_OFFSET can be set via environment variables.
     """
     card = card_image.convert("RGBA")
     logo = Image.open(logo_path).convert("RGBA")
 
+    # Read env vars or fallback to defaults
     foil_scale = float(os.getenv("FOIL_SCALE", 0.13))
-    foil_margin = float(os.getenv("FOIL_MARGIN", 0.05))
+    foil_x_offset = float(os.getenv("FOIL_X_OFFSET", 0.0))  # horizontal adjustment in fraction of card width
+    foil_y_offset = float(os.getenv("FOIL_Y_OFFSET", 0.0))  # vertical adjustment in fraction of card height
 
+    # Resize logo
     logo_width = int(card.width * foil_scale)
     ratio = logo_width / logo.width
     logo_height = int(logo.height * ratio)
     logo_resized = logo.resize((logo_width, logo_height), Image.LANCZOS)
 
-    pos_x = int(card.width - logo_width - card.width * foil_margin)
-    pos_y = int(card.height - logo_height - card.height * foil_margin)
+    # Compute final position
+    pos_x = int(card.width - logo_width - card.width * foil_margin + card.width * foil_x_offset)
+    pos_y = int(card.height - logo_height - card.height * foil_margin + card.height * foil_y_offset)
 
-    # Composite the logo cleanly without altering colors or opacity
+    # Composite the logo
     card.alpha_composite(logo_resized, dest=(pos_x, pos_y))
 
     output = io.BytesIO()
