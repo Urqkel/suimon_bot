@@ -151,27 +151,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def generate(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Handler for /generate command.
-    Prompts user to send an image, then triggers card generation.
+    /generate command: allows this user to generate one card.
     """
+    context.user_data["can_generate"] = True
     await update.message.reply_text(
         "Send me a meme image, and I’ll craft a unique SUIMON card for you 🃏"
     )
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Card generation is only triggered by /generate or 'create another' button.
-    This handler will check a flag set when a user invoked /generate.
+    Only generates a card if this user previously triggered /generate or clicked 'Create another'.
     """
-    user_id = update.message.from_user.id
-    if not context.chat_data.get("can_generate", False):
+    if not context.user_data.get("can_generate", False):
         await update.message.reply_text(
             "⚠️ Please use /generate or click 'Create another SUIMON card' before sending an image."
         )
         return
 
-    # Reset the flag so the user must explicitly trigger next time
-    context.chat_data["can_generate"] = False
+    # Reset flag so next image requires a new trigger
+    context.user_data["can_generate"] = False
 
     await update.message.reply_text("🎨 Generating your SUIMON card... please wait a moment!")
 
@@ -215,18 +213,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if query.data == "create_another":
-        # Allow next image to generate a card
-        context.chat_data["can_generate"] = True
-        await query.message.reply_text("Awesome! Send me a new meme image, and I'll make another SUIMON card for you.")
+        # Only allow this user to generate another card
+        context.user_data["can_generate"] = True
+        await query.message.reply_text(
+            "Awesome! Send me a new meme image, and I'll make another SUIMON card for you."
+        )
 
 # -----------------------------
 # Register Handlers
 # -----------------------------
 ptb_app.add_handler(CommandHandler("start", start))
-ptb_app.add_handler(CommandHandler("generate", lambda u, c: c.chat_data.update({"can_generate": True}) or generate(u, c)))
+ptb_app.add_handler(CommandHandler("generate", generate))
 ptb_app.add_handler(MessageHandler(filters.PHOTO, handle_image))
 ptb_app.add_handler(CallbackQueryHandler(button_callback))
-
 
 # -----------------------------
 # FastAPI + PTB Integration
