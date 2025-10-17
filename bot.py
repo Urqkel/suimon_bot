@@ -234,7 +234,7 @@ fastapi_app = FastAPI()
 ptb_app = ApplicationBuilder().token(BOT_TOKEN).build()
 
 # -----------------------------
-# Register Handlers AFTER ptb_app is created
+# Register handlers AFTER ptb_app is created
 # -----------------------------
 ptb_app.add_handler(CommandHandler("start", start))
 ptb_app.add_handler(CommandHandler("generate", generate))
@@ -242,7 +242,7 @@ ptb_app.add_handler(MessageHandler(filters.PHOTO, handle_image))
 ptb_app.add_handler(CallbackQueryHandler(button_callback))
 
 # -----------------------------
-# Startup event to initialize PTB and set webhook
+# Startup event
 # -----------------------------
 @fastapi_app.on_event("startup")
 async def startup_event():
