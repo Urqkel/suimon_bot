@@ -146,14 +146,34 @@ def check_flavor_text(card_image: Image.Image):
 # -----------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "Welcome to SUIMON card creator! Send me a meme and I’ll craft a unique collectible SUIMON card for you 🃏"
+        "Welcome to SUIMON card creator! Use /generate to start creating a SUIMON card 🃏"
+    )
+
+async def generate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handler for /generate command.
+    Prompts user to send an image, then triggers card generation.
+    """
+    await update.message.reply_text(
+        "Send me a meme image, and I’ll craft a unique SUIMON card for you 🃏"
     )
 
 async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🎨 Generating your SUIMON card... please wait a moment!")
+    """
+    Card generation is only triggered by /generate or 'create another' button.
+    This handler will check a flag set when a user invoked /generate.
+    """
+    user_id = update.message.from_user.id
+    if not context.chat_data.get("can_generate", False):
+        await update.message.reply_text(
+            "⚠️ Please use /generate or click 'Create another SUIMON card' before sending an image."
+        )
+        return
 
-    chat_type = update.effective_chat.type
-    user_mention = update.message.from_user.mention_html() if chat_type in ["group", "supergroup"] else ""
+    # Reset the flag so the user must explicitly trigger next time
+    context.chat_data["can_generate"] = False
+
+    await update.message.reply_text("🎨 Generating your SUIMON card... please wait a moment!")
 
     photo = update.message.photo[-1]
     photo_file = await photo.get_file()
@@ -179,7 +199,7 @@ async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [[InlineKeyboardButton("🎨 Create another SUIMON card", callback_data="create_another")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        caption = f"{user_mention} Here’s your SUIMON card! 🃏" if user_mention else "Here’s your SUIMON card! 🃏"
+        caption = f"Here’s your SUIMON card! 🃏"
 
         await update.message.reply_photo(
             photo=final_card_bytes,
@@ -195,7 +215,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     if query.data == "create_another":
+        # Allow next image to generate a card
+        context.chat_data["can_generate"] = True
         await query.message.reply_text("Awesome! Send me a new meme image, and I'll make another SUIMON card for you.")
+
+# -----------------------------
+# Register Handlers
+# -----------------------------
+ptb_app.add_handler(CommandHandler("start", start))
+ptb_app.add_handler(CommandHandler("generate", lambda u, c: c.chat_data.update({"can_generate": True}) or generate(u, c)))
+ptb_app.add_handler(MessageHandler(filters.PHOTO, handle_image))
+ptb_app.add_handler(CallbackQueryHandler(button_callback))
+
 
 # -----------------------------
 # FastAPI + PTB Integration
